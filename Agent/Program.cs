@@ -2,12 +2,14 @@ using Agent.Services;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 var systemdPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config/systemd/user/");
 
-builder.Services.AddTransient(sp => new ProcessRunner(systemdPath));
+builder.Services.AddTransient<IFileNamingService, FileNamingService>();
+builder.Services.AddTransient(sp => new ProcessRunner(
+    sp.GetRequiredService<IFileNamingService>(),
+    systemdPath));
 
 var app = builder.Build();
 
@@ -18,26 +20,31 @@ if (app.Environment.IsDevelopment())
 
 var servicesApi = app.MapGroup("/services");
 
-servicesApi.MapPost("/", async (IFormFile file, ProcessRunner _pr) =>
+servicesApi.MapPost("/", async (IFormFile file, ProcessRunner processRunner) =>
 {
-    var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-    if (extension != ".dll")
-        return Results.BadRequest("Only .dll files are accepted.");
+    if (file.Length > 50 * 1024 * 1024)
+        return Results.BadRequest("File too large. Max 50MB.");
 
-    if (file.Length > 100 * 1024 * 1024)
-        return Results.BadRequest("File too large. Max 100MB.");
+    IFileNamingService namingService = new FileNamingService();
+    string appName;
+    try
+    {
+        appName = namingService.GetSafeAppName(file.FileName);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(ex.Message);
+    }
 
-    string appName = "slice-" + Path.GetFileNameWithoutExtension(file.FileName);
-
-    var path = Path.Combine("slice", appName);
+    var uploadPath = namingService.GetUploadPath(appName);
 
     if (!Directory.Exists("slice"))
         Directory.CreateDirectory("slice");
 
-    using var stream = File.Create(path + extension);
+    await using var stream = File.Create(uploadPath);
     await file.CopyToAsync(stream);
 
-    _pr.CreateSystemdService(appName);
+    processRunner.CreateSystemdService(appName);
 
     return Results.Accepted($"{appName} Accepted");
 });
