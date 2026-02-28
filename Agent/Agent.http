@@ -1,0 +1,11 @@
+@Agent_HostAddress = http://localhost:5165
+
+GET {{Agent_HostAddress}}/todos/
+Accept: application/json
+
+###
+
+GET {{Agent_HostAddress}}/todos/1
+Accept: application/json
+
+###
