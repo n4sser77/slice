@@ -75,8 +75,5 @@ public class AppOrchestrator
 
 
 
----
 
-Denna struktur bevisar för din handledare att du inte bara bygger en UI-wrapper, utan ett system som hanterar resurser och nätverk autonomt.
 
-**Vad vill du hugga tag i härnäst? Ska vi definiera hur din `System.Diagnostics.Process` faktiskt ska konfigureras för att inte blockera din huvudtråd, eller vill du fortsätta med att skriva klart rapportmallen kapitel 3 (Lösningsförslag)?**
