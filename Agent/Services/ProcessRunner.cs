@@ -1,25 +1,27 @@
-using System.Text.RegularExpressions;
-
 namespace Agent.Services;
 
 public class ProcessRunner
 {
     private readonly string _targetDir;
-    public ProcessRunner(string targetDir)
-      => _targetDir = targetDir;
+    private readonly IFileNamingService _namingService;
+
+    public ProcessRunner(IFileNamingService namingService, string targetDir)
+    {
+        _namingService = namingService;
+        _targetDir = targetDir;
+    }
 
     public void CreateSystemdService(string appName)
     {
-        string safeName = SanitizeName(appName);
-        string appDir = Path.Combine("slice", safeName);
+        string appDir = Path.Combine("slice", appName);
         string serviceContent =
             $@"
             [Unit]
-            Description=Uploaded C# Service: {safeName}
+            Description=Uploaded C# Service: {appName}
 
             [Service]
             WorkingDirectory={appDir}
-            ExecStart=/usr/bin/dotnet {appDir}/{safeName}.dll
+            ExecStart=/usr/bin/dotnet {appDir}/{appName}.dll
             Restart=always
             DynamicUser=yes
             NoNewPrivileges=true
@@ -28,15 +30,7 @@ public class ProcessRunner
             [Install]
             WantedBy=multi-user.target";
 
-        var servicePath = Path.Combine(_targetDir, $"{safeName}.service");
+        var servicePath = Path.Combine(_targetDir, $"{appName}.service");
         File.WriteAllText(servicePath, serviceContent.Trim());
-    }
-
-    private static string SanitizeName(string name)
-    {
-        var safe = Regex.Replace(name, @"[^a-zA-Z0-9-]", "");
-        if (safe.Contains("..") || safe.StartsWith('/'))
-            safe = safe.Replace("..", "").TrimStart('/');
-        return string.IsNullOrEmpty(safe) ? "unnamed" : safe;
     }
 }
