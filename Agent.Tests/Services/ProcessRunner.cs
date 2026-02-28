@@ -4,15 +4,13 @@ namespace Agent.Tests;
 public class ProcessRunnerTests : IDisposable
 {
     private readonly ProcessRunner _sut;
-    private readonly IFileNamingService _namingService;
     private static readonly string systemdPath =
        Path.Combine(Path.GetTempPath(), "slice-systemd-tests");
 
     public ProcessRunnerTests()
     {
         Directory.CreateDirectory(systemdPath);
-        _namingService = new FileNamingService();
-        _sut = new ProcessRunner(_namingService, systemdPath);
+        _sut = new ProcessRunner(systemdPath);
     }
 
     public void Dispose()

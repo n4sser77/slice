@@ -3,11 +3,9 @@ namespace Agent.Services;
 public class ProcessRunner
 {
     private readonly string _targetDir;
-    private readonly IFileNamingService _namingService;
 
-    public ProcessRunner(IFileNamingService namingService, string targetDir)
+    public ProcessRunner(string targetDir)
     {
-        _namingService = namingService;
         _targetDir = targetDir;
     }
 

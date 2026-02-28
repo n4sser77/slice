@@ -7,9 +7,7 @@ builder.Services.AddOpenApi();
 var systemdPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config/systemd/user/");
 
 builder.Services.AddTransient<IFileNamingService, FileNamingService>();
-builder.Services.AddTransient(sp => new ProcessRunner(
-    sp.GetRequiredService<IFileNamingService>(),
-    systemdPath));
+builder.Services.AddTransient(sp => new ProcessRunner(systemdPath));
 
 var app = builder.Build();
 
