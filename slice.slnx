@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="Agent.Cli/Agent.Cli.csproj" />
   <Project Path="Agent.Tests/Agent.Tests.csproj" />
   <Project Path="Agent/Agent.csproj" />
 </Solution>

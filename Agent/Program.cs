@@ -1,13 +1,18 @@
+using Agent.Serialization;
 using Agent.Services;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
 builder.Services.AddOpenApi();
-
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    // This makes the API use your source-generated context globally
+    options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonContext.Default);
+});
 var systemdPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config/systemd/user/");
 
 builder.Services.AddTransient<IFileNamingService, FileNamingService>();
-builder.Services.AddTransient(sp => new ProcessRunner(systemdPath));
+builder.Services.AddTransient(sp => new ProcessManager(systemdPath));
 
 var app = builder.Build();
 
@@ -18,12 +23,11 @@ if (app.Environment.IsDevelopment())
 
 var servicesApi = app.MapGroup("/services");
 
-servicesApi.MapPost("/", async (IFormFile file, ProcessRunner processRunner) =>
+servicesApi.MapPost("/", async (IFormFile file, ProcessManager processRunner, IFileNamingService namingService) =>
 {
     if (file.Length > 50 * 1024 * 1024)
         return Results.BadRequest("File too large. Max 50MB.");
 
-    IFileNamingService namingService = new FileNamingService();
     string appName;
     try
     {
@@ -42,9 +46,15 @@ servicesApi.MapPost("/", async (IFormFile file, ProcessRunner processRunner) =>
     await using var stream = File.Create(uploadPath);
     await file.CopyToAsync(stream);
 
-    processRunner.CreateSystemdService(appName);
+    await processRunner.CreateSystemdService(appName);
 
     return Results.Accepted($"{appName} Accepted");
 });
 
+
+servicesApi.MapGet("/", async () =>
+{
+});
+
 app.Run();
+
