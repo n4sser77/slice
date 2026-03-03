@@ -1,4 +1,3 @@
-
 **Finns det tillräckligt med minne?** och **Vilken port är ledig?**
 
 förslag på C#-struktur och en tvådagars-sprint för att bygga just denna grund.

@@ -6,12 +6,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
     <PublishAot>true</PublishAot>
-    <IsAotCompatible>true</IsAotCompatible> 
+    <IsAotCompatible>true</IsAotCompatible>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)\Generated</CompilerGeneratedFilesOutputPath>
 
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
   </ItemGroup>
-  
+
 </Project>
