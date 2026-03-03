@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics;
+using System.Runtime.InteropServices.Marshalling;
+using System.Text.RegularExpressions;
 
 string? filepath = null;
 
@@ -51,7 +53,7 @@ var psi = new ProcessStartInfo
         "-c", "Release",
         "-r", "linux-arm64",
         "--self-contained","false",
-        "-p:PublishAot=false"
+        "-p:PublishAot=false",
     }
 };
 
@@ -85,6 +87,19 @@ try
     // Indent every line of stdout by 2 spaces
     Console.WriteLine(string.Join(Environment.NewLine, stdout.Split('\n').Select(line => $"  | {line.Trim()}")));
     Console.WriteLine(new string('-', 40));
+
+    using HttpClient client = new HttpClient
+    {
+        BaseAddress = new("http://localhost:5165")
+    };
+    using var MultipartContent = new MultipartFormDataContent();
+
+    var fileStream = File.OpenRead(filepath);
+    var filecontent = new StreamContent(fileStream);
+    // client.PostAsync();
+
+
+
 }
 catch (OperationCanceledException)
 {
