@@ -4,7 +4,7 @@ namespace Agent.Services;
 
 public partial class FileNamingService : IFileNamingService
 {
-    private const string AllowedExtension = ".dll";
+    // private const string AllowedExtension = ".dll";
     private const string FilePrefix = "slice";
 
     [GeneratedRegex(@"[^a-zA-Z0-9-]")]
@@ -12,9 +12,9 @@ public partial class FileNamingService : IFileNamingService
 
     public string GetSafeAppName(string fileName)
     {
-        var extension = Path.GetExtension(fileName).ToLowerInvariant();
-        if (extension != AllowedExtension)
-            throw new ArgumentException($"Only {AllowedExtension} files are accepted.");
+        // var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        // if (extension != AllowedExtension)
+        //     throw new ArgumentException($"Only {AllowedExtension} files are accepted.");
 
         var rawName = Path.GetFileNameWithoutExtension(fileName);
         var cleanName = SafeCharsRegex().Replace(rawName, "").ToLowerInvariant();
@@ -27,6 +27,6 @@ public partial class FileNamingService : IFileNamingService
 
     public string GetUploadPath(string appName)
     {
-        return Path.Combine(FilePrefix, appName + AllowedExtension);
+        return Path.Combine(FilePrefix, appName);
     }
 }

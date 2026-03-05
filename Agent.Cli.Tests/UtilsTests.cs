@@ -18,8 +18,8 @@ public class UtilsTests
 
 ";
         var expected = Path.GetFullPath(
-             "/home/qanasser/projects/slice/Agent.Cli/" +
-             "bin/Release/net10.0/linux-arm64/publish/".Trim());
+              "/home/qanasser/projects/slice/Agent.Cli/" +
+              "bin/Release/net10.0/linux-arm64/publish/".Trim());
 
         var path = Utils.FindPublishPath(stdout);
         Console.WriteLine("path return: " + path);
