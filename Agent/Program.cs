@@ -1,5 +1,6 @@
 using Agent.Serialization;
 using Agent.Services;
+using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -23,38 +24,36 @@ if (app.Environment.IsDevelopment())
 
 var servicesApi = app.MapGroup("/services");
 
-servicesApi.MapPost("/", async (IFormFile file, ProcessManager processRunner, IFileNamingService namingService) =>
+servicesApi.MapPost("/", [RequestSizeLimit(100_000_000)] async (IFormFile file, ProcessManager processRunner, IFileNamingService namingService) =>
 {
-    if (file.Length > 50 * 1024 * 1024)
-        return Results.BadRequest("File too large. Max 50MB.");
-
-    string appName;
     try
     {
-        appName = namingService.GetSafeAppName(file.FileName);
+        string appSafePath = namingService.GetSafeAppName(file.FileName);
+        var z = new ZipExtractor();
+        z.ReadAndUnzip(file.OpenReadStream(), appSafePath);
+
+        var uploadPath = namingService.GetUploadPath(appSafePath);
+
+        if (!Directory.Exists("slice"))
+            Directory.CreateDirectory("slice");
+
+        await using var stream = File.Create(uploadPath);
+        await file.CopyToAsync(stream);
+
+        await processRunner.CreateSystemdService(appSafePath);
+
+        return Results.Accepted($"{appSafePath} Accepted");
     }
     catch (ArgumentException ex)
     {
         return Results.BadRequest(ex.Message);
     }
-
-    var uploadPath = namingService.GetUploadPath(appName);
-
-    if (!Directory.Exists("slice"))
-        Directory.CreateDirectory("slice");
-
-    await using var stream = File.Create(uploadPath);
-    await file.CopyToAsync(stream);
-
-    await processRunner.CreateSystemdService(appName);
-
-    return Results.Accepted($"{appName} Accepted");
 });
 
 
-servicesApi.MapGet("/", async () =>
-{
-});
+// servicesApi.MapGet("/", async () =>
+// {
+// });
 
 app.Run();
 
