@@ -70,6 +70,7 @@ public class ProcessManager
             WantedBy=multi-user.target";
 
         var servicePath = Path.Combine(_targetDir, $"{appName}.service");
+        Directory.CreateDirectory(_targetDir);
         File.WriteAllText(servicePath, serviceContent.Trim());
 
         await RunService(appName);

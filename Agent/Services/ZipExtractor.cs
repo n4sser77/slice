@@ -2,7 +2,7 @@ using System.IO.Compression;
 
 public class ZipExtractor
 {
-    public void ReadAndUnzip(Stream file, string path)
+    public async Task ReadAndUnzip(Stream file, string path)
     {
         using (Stream s = file)
         using (ZipArchive archive = new ZipArchive(s))
@@ -19,8 +19,8 @@ public class ZipExtractor
                     continue;
                 }
 
-                entry.ExtractToFile(
-                        filePath, overwrite: true);
+                await entry.ExtractToFileAsync(
+                          filePath, overwrite: true);
             }
         }
     }

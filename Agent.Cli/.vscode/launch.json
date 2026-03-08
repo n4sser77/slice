@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Agent.Cli",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/Agent.Cli/bin/Debug/net10.0/Agent.Cli",
+            "args": ["Agent"],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Debug Agent.Cli (external terminal)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/Agent.Cli/bin/Debug/net10.0/Agent.Cli",
+            "args": ["Agent"],
+            "console": "externalTerminal",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

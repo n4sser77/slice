@@ -2,7 +2,9 @@ using Agent.Serialization;
 using Agent.Services;
 using Microsoft.AspNetCore.Mvc;
 
+
 var builder = WebApplication.CreateSlimBuilder(args);
+
 
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -22,15 +24,15 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-var servicesApi = app.MapGroup("/services");
 
-servicesApi.MapPost("/", [RequestSizeLimit(100_000_000)] async (IFormFile file, ProcessManager processRunner, IFileNamingService namingService) =>
+
+app.MapPost("/services", [RequestSizeLimit(100_000_000)] async (IFormFile file, ProcessManager processRunner, IFileNamingService namingService) =>
 {
     try
     {
         string appSafePath = namingService.GetSafeAppName(file.FileName);
         var z = new ZipExtractor();
-        z.ReadAndUnzip(file.OpenReadStream(), appSafePath);
+        await z.ReadAndUnzip(file.OpenReadStream(), appSafePath);
 
         var uploadPath = namingService.GetUploadPath(appSafePath);
 
@@ -48,12 +50,9 @@ servicesApi.MapPost("/", [RequestSizeLimit(100_000_000)] async (IFormFile file, 
     {
         return Results.BadRequest(ex.Message);
     }
-});
+}).DisableAntiforgery();
 
 
-// servicesApi.MapGet("/", async () =>
-// {
-// });
 
 app.Run();
 
