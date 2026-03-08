@@ -18,7 +18,7 @@ public class ProcessManager
         var psi = new ProcessStartInfo
         {
             FileName = "systemctl",
-            Arguments = "list-units --type=service --all --output=json --no-pager",
+            Arguments = "--user list-units --type=service --all --output=json --no-pager",
             RedirectStandardOutput = true,
             UseShellExecute = false,
             CreateNoWindow = true
@@ -34,44 +34,60 @@ public class ProcessManager
         return [.. services.Where(s => s.Unit.StartsWith("slice-", StringComparison.OrdinalIgnoreCase))];
 
     }
-    private async Task RunService(string appName)
+    private Task RunService(string appName)
     {
-        string[] commands = ["daemon-reload", $"enable --now {appName}.service"];
+        RunSystemctlUser("daemon-reload");
 
-        foreach (var cmd in commands)
-        {
-            Process.Start(new ProcessStartInfo()
-            {
-                FileName = "systemctl",
-                Arguments = cmd,
-                UseShellExecute = false,
-                CreateNoWindow = true,
+        bool isActive = IsServiceActive(appName);
+        RunSystemctlUser(isActive ? $"restart {appName}.service" : $"enable --now {appName}.service");
 
-            })?.WaitForExit();
-        }
+        return Task.CompletedTask;
     }
-    public async Task CreateSystemdService(string appName)
+
+    private bool IsServiceActive(string appName)
     {
-        string appDir = Path.Combine("slice", appName);
-        string serviceContent =
-            $@"
-            [Unit]
-            Description=Uploaded C# Service: {appName}
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "systemctl",
+            Arguments = $"--user is-active {appName}.service",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        });
+        process?.WaitForExit();
+        return process?.ExitCode == 0;
+    }
 
-            [Service]
-            WorkingDirectory={appDir}
-            ExecStart=/usr/bin/dotnet {appDir}/{appName}.dll
-            Restart=always
-            DynamicUser=yes
-            NoNewPrivileges=true
-            PrivateTmp=true
+    private void RunSystemctlUser(string args)
+    {
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "systemctl",
+            Arguments = $"--user {args}",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        })?.WaitForExit();
+    }
+    public async Task CreateSystemdService(string appName, string dllName)
+    {
+        string appDir = Path.GetFullPath(Path.Combine("slice", appName));
+        string serviceContent = $"""
+[Unit]
+Description=Uploaded C# Service: {appName}
 
-            [Install]
-            WantedBy=multi-user.target";
+[Service]
+WorkingDirectory={appDir}
+ExecStart=/usr/bin/dotnet {appDir}/{dllName}.dll
+Restart=always
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+""";
 
         var servicePath = Path.Combine(_targetDir, $"{appName}.service");
         Directory.CreateDirectory(_targetDir);
-        File.WriteAllText(servicePath, serviceContent.Trim());
+        File.WriteAllText(servicePath, serviceContent);
 
         await RunService(appName);
     }

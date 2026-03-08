@@ -7,11 +7,11 @@ public class FileNamingServiceTests
     private readonly FileNamingService _sut = new();
 
     [Theory]
-    [InlineData("MyApp.dll", "slice-myapp")]
-    [InlineData("test.DLL", "slice-test")]
-    [InlineData("hello-world.dll", "slice-hello-world")]
-    [InlineData("app123.dll", "slice-app123")]
-    public void GetSafeAppName_ValidDll_ReturnsSafeName(string fileName, string expected)
+    [InlineData("MyApp.zip", "slice-myapp")]
+    [InlineData("test.ZIP", "slice-test")]
+    [InlineData("hello-world.zip", "slice-hello-world")]
+    [InlineData("app123.zip", "slice-app123")]
+    public void GetSafeAppName_ValidZip_ReturnsSafeName(string fileName, string expected)
     {
         var result = _sut.GetSafeAppName(fileName);
 
@@ -29,11 +29,11 @@ public class FileNamingServiceTests
     }
 
     [Theory]
-    [InlineData("my app.dll")]
-    [InlineData("my@app.dll")]
-    [InlineData("my#app.dll")]
-    [InlineData("../etc/passwd.dll")]
-    [InlineData("my..app.dll")]
+    [InlineData("my app.zip")]
+    [InlineData("my@app.zip")]
+    [InlineData("my#app.zip")]
+    [InlineData("../etc/passwd.zip")]
+    [InlineData("my..app.zip")]
     public void GetSafeAppName_SpecialCharacters_RemovesThem(string fileName)
     {
         var result = _sut.GetSafeAppName(fileName);
@@ -55,7 +55,7 @@ public class FileNamingServiceTests
     public void GetUploadPath_ReturnsCorrectPath()
     {
         var appName = "slice-myapp";
-        var expected = Path.Combine("slice", "slice-myapp.dll");
+        var expected = Path.Combine("slice", "slice-myapp");
 
         var result = _sut.GetUploadPath(appName);
 
