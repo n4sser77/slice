@@ -1,7 +1,8 @@
 ﻿using System.Diagnostics;
-using System.Runtime.InteropServices.Marshalling;
-using System.Text.RegularExpressions;
+using System.IO.Compression;
+using Agent.Cli;
 
+//write cw hello world, or a welcome text
 string? filepath = null;
 
 if (args.Length == 0 || string.IsNullOrWhiteSpace(args[0]))
@@ -11,9 +12,15 @@ if (args.Length == 0 || string.IsNullOrWhiteSpace(args[0]))
 }
 string pwd = Directory.GetCurrentDirectory();
 string targetName = args[0];
-var files = Directory.EnumerateFiles(pwd, $"{targetName}.*");
+string targetDir = "";
 
-
+if (IsTargetADirectory(targetName))
+{
+    targetDir = Path.Combine(pwd, targetName);
+}
+var searchPattern = $"{targetName}.*";
+var searchDir = string.IsNullOrWhiteSpace(targetDir) ? pwd : Path.Combine(pwd, targetDir);
+var files = Directory.EnumerateFiles(searchDir, searchPattern);
 foreach (var f in files)
 {
     if (f.EndsWith(".csproj"))
@@ -88,18 +95,35 @@ try
     Console.WriteLine(string.Join(Environment.NewLine, stdout.Split('\n').Select(line => $"  | {line.Trim()}")));
     Console.WriteLine(new string('-', 40));
 
+
+    string publishPath = Utils.FindPublishPath(stdout);
+    string targetPath = Path.Combine(Path.GetTempPath(), Path.GetFileNameWithoutExtension(filepath));
+    if (File.Exists(targetPath))
+        File.Delete(targetPath);
+
+    ZipFile.CreateFromDirectory(publishPath, targetPath);
+
     using HttpClient client = new HttpClient
     {
-        BaseAddress = new("http://localhost:5165")
+        BaseAddress = new("http://localhost:5165"),
+        Timeout = TimeSpan.FromSeconds(60)
     };
-    using var MultipartContent = new MultipartFormDataContent();
+    using var multipartContent = new MultipartFormDataContent();
 
-    var fileStream = File.OpenRead(filepath);
-    var filecontent = new StreamContent(fileStream);
-    // client.PostAsync();
+    using var fileContent = new StreamContent(File.OpenRead(targetPath));
+    multipartContent.Add(fileContent, "file", Path.GetFileName(targetPath));
 
+    var res = await client.PostAsync("/services", multipartContent);
 
+    if (!res.IsSuccessStatusCode)
+    {
+        var error = await res.Content.ReadAsStringAsync();
+        Console.WriteLine($"Upload failed: {res.StatusCode} - {error}");
+        return 1;
+    }
 
+    var responseBody = await res.Content.ReadAsStringAsync();
+    Console.WriteLine($"Upload successful: {responseBody}");
 }
 catch (OperationCanceledException)
 {
@@ -107,8 +131,15 @@ catch (OperationCanceledException)
     Console.WriteLine("Build process terminated by user");
     return 1;
 }
+catch (HttpRequestException e)
+{
+    process.Kill(entireProcessTree: true);
+    Console.WriteLine($"Request to remote server failed: {e.StatusCode}, {e.Message} ");
+    return 1;
+}
 return 0;
 
-
-
-
+static bool IsTargetADirectory(string targetName)
+{
+    return !targetName.EndsWith(".cs") && !targetName.StartsWith("/");
+}
