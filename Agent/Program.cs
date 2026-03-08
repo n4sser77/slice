@@ -31,18 +31,17 @@ app.MapPost("/services", [RequestSizeLimit(100_000_000)] async (IFormFile file, 
     try
     {
         string appSafePath = namingService.GetSafeAppName(file.FileName);
-        var z = new ZipExtractor();
-        await z.ReadAndUnzip(file.OpenReadStream(), appSafePath);
-
+        string dllName = Path.GetFileNameWithoutExtension(file.FileName);
         var uploadPath = namingService.GetUploadPath(appSafePath);
+        Directory.CreateDirectory(uploadPath);
+        var z = new ZipExtractor();
+        await z.ReadAndUnzip(file.OpenReadStream(), uploadPath);
 
-        if (!Directory.Exists("slice"))
-            Directory.CreateDirectory("slice");
+        var dllPath = Path.Combine(Path.GetFullPath(uploadPath), dllName + ".dll");
+        if (!File.Exists(dllPath))
+            return Results.BadRequest($"No runnable DLL '{dllName}.dll' found in uploaded archive.");
 
-        await using var stream = File.Create(uploadPath);
-        await file.CopyToAsync(stream);
-
-        await processRunner.CreateSystemdService(appSafePath);
+        await processRunner.CreateSystemdService(appSafePath, dllName);
 
         return Results.Accepted($"{appSafePath} Accepted");
     }
