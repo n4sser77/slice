@@ -11,7 +11,7 @@ public class ZipExtractor
             foreach (ZipArchiveEntry entry in archive.Entries)
             {
                 if (string.IsNullOrEmpty(entry.Name)) continue;
-                var filePath = Path.GetFullPath(Path.Combine(fullPath, entry.FullName));
+                var filePath = Path.GetFullPath(Path.Combine(fullPath, entry.Name));
                 if (!filePath.StartsWith(fullPath)) continue;
                 Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
                 await entry.ExtractToFileAsync(filePath, overwrite: true);

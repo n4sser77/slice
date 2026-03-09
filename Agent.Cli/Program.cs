@@ -46,6 +46,8 @@ Console.CancelKeyPress += (s, e) =>
     Console.WriteLine("\nAborting build...");
 };
 
+// var archRpi = "linux-arm64";
+var archLinux = "linux-x64";
 
 var psi = new ProcessStartInfo
 {
@@ -58,7 +60,7 @@ var psi = new ProcessStartInfo
         "publish",
         filepath,
         "-c", "Release",
-        "-r", "linux-arm64",
+        "-r", archLinux,
         "--self-contained","false",
         "-p:PublishAot=false",
     }
@@ -67,41 +69,88 @@ var psi = new ProcessStartInfo
 
 // Create the process instance so we can track it
 using var process = new Process { StartInfo = psi };
+string stdout = "";
+process.OutputDataReceived += (sender, e) =>
+{
+    if (e.Data != null)
+    {
+        Console.WriteLine(new string('-', 40));
+        Console.Write($"[{DateTime.Now:HH:mm:ss}] ");
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.Write($"SUCCESS");
+        Console.ResetColor();
+        Console.WriteLine($": {Path.GetFileName(filepath)}");
+
+        Console.WriteLine(string.Join(Environment.NewLine, e.Data.Split('\n').Select(line => $"  > {line.Trim()}")));
+        stdout += e.Data;
+    }
+};
+
+process.ErrorDataReceived += (sender, e) =>
+{
+    if (e.Data != null)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine("FAILED");
+        Console.WriteLine("Errors:");
+        Console.WriteLine(string.Join(Environment.NewLine, e.Data.Split('\n').Select(line => $"  > {line.Trim()}")));
+    }
+};
+
 try
 {
     process.Start();
+    process.BeginErrorReadLine();
+    process.BeginOutputReadLine();
 
     await process.WaitForExitAsync(cts.Token);
-    var statusColor = process.ExitCode == 0 ? ConsoleColor.Green : ConsoleColor.Red;
-    var statusText = process.ExitCode == 0 ? "SUCCESS" : "FAILED";
+    // var statusColor = process.ExitCode == 0 ? ConsoleColor.Green : ConsoleColor.Red;
+    // var statusText = process.ExitCode == 0 ? "SUCCESS" : "FAILED";
+    // if (process.ExitCode != 0)
+    // {
+    //     var error = await process.StandardError.ReadToEndAsync(cts.Token);
+    //     Console.WriteLine("Errors:");
+    //     Console.WriteLine(string.Join(Environment.NewLine, error.Split('\n').Select(line => $"  > {line.Trim()}")));
+    // }
 
-    Console.WriteLine(new string('-', 40));
-    Console.Write($"[{DateTime.Now:HH:mm:ss}] ");
-    Console.ForegroundColor = statusColor;
-    Console.Write($"{statusText} ");
-    Console.ResetColor();
-    Console.WriteLine($": {Path.GetFileName(filepath)}");
+    // var stdout = await process.StandardOutput.ReadToEndAsync(cts.Token);
+    //
+    // Console.WriteLine("Details:");
+    // // Indent every line of stdout by 2 spaces
+    // Console.WriteLine(string.Join(Environment.NewLine, stdout.Split('\n').Select(line => $"  | {line.Trim()}")));
+    // Console.WriteLine(new string('-', 40));
 
     if (process.ExitCode != 0)
     {
-        var error = await process.StandardError.ReadToEndAsync(cts.Token);
-        Console.WriteLine("Errors:");
-        Console.WriteLine(string.Join(Environment.NewLine, error.Split('\n').Select(line => $"  > {line.Trim()}")));
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine("build failed!");
+        return 1;
     }
 
-    var stdout = await process.StandardOutput.ReadToEndAsync(cts.Token);
-    Console.WriteLine("Details:");
-    // Indent every line of stdout by 2 spaces
-    Console.WriteLine(string.Join(Environment.NewLine, stdout.Split('\n').Select(line => $"  | {line.Trim()}")));
-    Console.WriteLine(new string('-', 40));
-
-
     string publishPath = Utils.FindPublishPath(stdout);
-    string targetPath = Path.Combine(Path.GetTempPath(), Path.GetFileNameWithoutExtension(filepath));
-    if (File.Exists(targetPath))
-        File.Delete(targetPath);
+    // string targetPath = Path.Combine(Path.GetTempPath(), Path.GetFileNameWithoutExtension("slice-apps"));
+    // string targetZip = Path.GetFileNameWithoutExtension(filepath) + ".zip";
+    // Directory.CreateDirectory(targetPath);
 
-    ZipFile.CreateFromDirectory(publishPath, targetPath);
+
+    using var ms = new MemoryStream();
+
+    using (var arc = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+    {
+        var srcFolder = publishPath;
+        foreach (var srcFolderfilepath in Directory.GetFiles(srcFolder))
+        {
+            var entry = arc.CreateEntry(srcFolderfilepath);
+            using var entryStream = await entry.OpenAsync();
+            using var fs = File.OpenRead(srcFolderfilepath);
+            await fs.CopyToAsync(entryStream);
+        }
+    }
+    ms.Position = 0;
+
+
+
+    // ZipFile.CreateFromDirectory(publishPath, Path.Combine(targetPath, targetZip));
 
     using HttpClient client = new HttpClient
     {
@@ -110,8 +159,9 @@ try
     };
     using var multipartContent = new MultipartFormDataContent();
 
-    using var fileContent = new StreamContent(File.OpenRead(targetPath));
-    multipartContent.Add(fileContent, "file", Path.GetFileName(targetPath));
+
+    using var fileContent = new StreamContent(ms);
+    multipartContent.Add(fileContent, "file", $"{Path.GetFileNameWithoutExtension(filepath)}.zip");
 
     var res = await client.PostAsync("/services", multipartContent);
 
