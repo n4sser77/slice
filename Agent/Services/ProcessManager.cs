@@ -8,17 +8,19 @@ namespace Agent.Services;
 public class ProcessManager
 {
     private readonly string _targetDir;
+    private readonly IPortManager _portManager;
 
-    public ProcessManager(string targetDir)
+    public ProcessManager(string targetDir, IPortManager portManager)
     {
         _targetDir = targetDir;
+        _portManager = portManager;
     }
     public async Task<List<SystemdService>> ListServices()
     {
         var psi = new ProcessStartInfo
         {
             FileName = "systemctl",
-            Arguments = "--user list-units --type=service --all --output=json --no-pager",
+            Arguments = "--user list-units \"slice*\" --type=service --all --output=json --no-pager",
             RedirectStandardOutput = true,
             UseShellExecute = false,
             CreateNoWindow = true
@@ -70,25 +72,42 @@ public class ProcessManager
     public async Task CreateSystemdService(string appName, string dllName)
     {
         string appDir = Path.GetFullPath(Path.Combine("slice", appName));
-        string serviceContent = $"""
-[Unit]
-Description=Uploaded C# Service: {appName}
+        int? nullablePort = _portManager.ReserveNextPort();
 
-[Service]
-WorkingDirectory={appDir}
-ExecStart=/usr/bin/dotnet {appDir}/{dllName}.dll
-Restart=always
-NoNewPrivileges=true
-PrivateTmp=true
+        int port = nullablePort is null ?
+            throw new OutOfPortsException() :
+            (int)nullablePort;
 
-[Install]
-WantedBy=multi-user.target
-""";
+        string serviceContent = ConstructServicefile(appName, dllName, appDir, port);
 
         var servicePath = Path.Combine(_targetDir, $"{appName}.service");
         Directory.CreateDirectory(_targetDir);
         File.WriteAllText(servicePath, serviceContent);
 
         await RunService(appName);
+    }
+
+
+    private string ConstructServicefile(string appName, string dllName, string appDir, int port) =>
+        $"""
+        [Unit]
+        Description=Uploaded C# Service: {appName}
+        Environment=ASPNETCORE_HTTP_PORTS={port}
+        [Service]
+        WorkingDirectory={appDir}
+        ExecStart=/usr/bin/dotnet {appDir}/{dllName}.dll
+        Restart=always
+        NoNewPrivileges=true
+        PrivateTmp=true
+
+        [Install]
+        WantedBy=multi-user.target
+        """;
+
+    public class OutOfPortsException : Exception
+    {
+        public OutOfPortsException() : base("No available ports left in the allocated range (5001-5050).") { }
+        public OutOfPortsException(string message) : base(message) { }
+        public OutOfPortsException(string message, Exception inner) : base(message, inner) { }
     }
 }

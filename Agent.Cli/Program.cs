@@ -154,7 +154,7 @@ try
 
     using HttpClient client = new HttpClient
     {
-        BaseAddress = new("http://localhost:5165"),
+        BaseAddress = new("http://localhost:5165/v1"),
         Timeout = TimeSpan.FromSeconds(60)
     };
     using var multipartContent = new MultipartFormDataContent();

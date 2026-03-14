@@ -10,13 +10,13 @@ public partial class FileNamingService : IFileNamingService
     [GeneratedRegex(@"[^a-zA-Z0-9-]")]
     private static partial Regex SafeCharsRegex();
 
-    public string GetSafeAppName(string fileName)
+    public string GetSafeAppName(string filename)
     {
-        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        var extension = Path.GetExtension(filename).ToLowerInvariant();
         if (extension != AllowedExtension)
             throw new ArgumentException($"Only {AllowedExtension} files are accepted.");
 
-        var rawName = Path.GetFileNameWithoutExtension(fileName);
+        var rawName = Path.GetFileNameWithoutExtension(filename);
         var cleanName = SafeCharsRegex().Replace(rawName, "").ToLowerInvariant();
 
         if (string.IsNullOrEmpty(cleanName))

@@ -13,7 +13,7 @@ public class ProcessManagerTests : IDisposable
     public ProcessManagerTests()
     {
         Directory.CreateDirectory(systemdPath);
-        _sut = new ProcessManager(systemdPath);
+        _sut = new ProcessManager(systemdPath, new PortManager());
     }
 
     public void Dispose()
