@@ -154,7 +154,7 @@ try
 
     using HttpClient client = new HttpClient
     {
-        BaseAddress = new("http://localhost:5165/v1"),
+        BaseAddress = new("http://localhost:5165/v1/"),
         Timeout = TimeSpan.FromSeconds(60)
     };
     using var multipartContent = new MultipartFormDataContent();
@@ -163,7 +163,7 @@ try
     using var fileContent = new StreamContent(ms);
     multipartContent.Add(fileContent, "file", $"{Path.GetFileNameWithoutExtension(filepath)}.zip");
 
-    var res = await client.PostAsync("/services", multipartContent);
+    var res = await client.PostAsync("services", multipartContent);
 
     if (!res.IsSuccessStatusCode)
     {

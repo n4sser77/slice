@@ -59,16 +59,14 @@ public class ProcessManager
         return process?.ExitCode == 0;
     }
 
-    private void RunSystemctlUser(string args)
+    private void RunSystemctlUser(string args) => Process.Start(new ProcessStartInfo
     {
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = "systemctl",
-            Arguments = $"--user {args}",
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        })?.WaitForExit();
-    }
+        FileName = "systemctl",
+        Arguments = $"--user {args}",
+        UseShellExecute = false,
+        CreateNoWindow = true,
+    })?.WaitForExit();
+
     public async Task CreateSystemdService(string appName, string dllName)
     {
         string appDir = Path.GetFullPath(Path.Combine("slice", appName));
@@ -86,9 +84,19 @@ public class ProcessManager
 
         await RunService(appName);
     }
+    private (string, string) ConstructCustomDomainUrl(string appName, int port)
+    {
+        var domain = appName.ToString() + ".localhost";
+        var url = $"http://{domain}:{port}";
+        return (domain, url);
+    }
 
 
-    private string ConstructServicefile(string appName, string dllName, string appDir, int port) =>
+    private string ConstructServicefile(string appName, string dllName, string appDir, int port)
+    {
+
+        var (domain, url) = ConstructCustomDomainUrl(appName, port);
+        return
         $"""
         [Unit]
         Description=Uploaded C# Service: {appName}
@@ -100,9 +108,14 @@ public class ProcessManager
         NoNewPrivileges=true
         PrivateTmp=true
 
+        Environment=ASPNETCORE_URLS={url}
+        Environment=ASPNETCORE_ENVIRONMENT=Production
+        Environment=ASPNETCORE_HOSTFILTERING__ALLOWEDHOSTS={domain}
+
         [Install]
         WantedBy=multi-user.target
         """;
+    }
 
     public class OutOfPortsException : Exception
     {
