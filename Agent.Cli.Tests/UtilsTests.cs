@@ -21,7 +21,7 @@ public class UtilsTests
               "/home/qanasser/projects/slice/Agent.Cli/" +
               "bin/Release/net10.0/linux-arm64/publish/".Trim());
 
-        var path = Utils.FindPublishPath(stdout);
+        var path = Agent.Cli.Utils.PathFinder.FindPublishPath(stdout);
         Console.WriteLine("path return: " + path);
         Assert.Equal(expected, path);
     }
