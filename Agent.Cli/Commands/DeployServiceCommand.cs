@@ -18,7 +18,6 @@ public class DeployServiceCommand(string targetName) : ICommand
         if (findResult.error is ErrorResult findError)
         {
             yield return new StepFailed("Finding project files", findError.Message);
-            yield return new FinalResult(findError);
             yield break;
         }
         yield return new StepCompleted("Finding project files", TimeSpan.Zero);
@@ -29,7 +28,6 @@ public class DeployServiceCommand(string targetName) : ICommand
         if (buildResult.error is ErrorResult buildError)
         {
             yield return new StepFailed("Building project", buildError.Message);
-            yield return new FinalResult(buildError);
             yield break;
         }
         yield return new StepCompleted("Building project", TimeSpan.Zero);
@@ -40,7 +38,6 @@ public class DeployServiceCommand(string targetName) : ICommand
         if (packageResult.error is ErrorResult packageError)
         {
             yield return new StepFailed("Creating deployment package", packageError.Message);
-            yield return new FinalResult(packageError);
             yield break;
         }
         yield return new StepCompleted("Creating deployment package", TimeSpan.Zero);
@@ -51,7 +48,6 @@ public class DeployServiceCommand(string targetName) : ICommand
         if (uploadResult.error is ErrorResult uploadError)
         {
             yield return new StepFailed("Uploading to deployment service", uploadError.Message);
-            yield return new FinalResult(uploadError);
             yield break;
         }
         yield return new StepCompleted("Uploading to deployment service", TimeSpan.Zero);
@@ -165,7 +161,7 @@ public class DeployServiceCommand(string targetName) : ICommand
             using var content = new ProgressStreamContent(zipStream);
             using var multipart = new MultipartFormDataContent();
             multipart.Add(content, "file", fileName);
-
+            client.Timeout = TimeSpan.FromSeconds(10);
             var uploadResult = await client.PostAsync("services", multipart, ct);
 
             if (!uploadResult.IsSuccessStatusCode)
@@ -180,6 +176,10 @@ public class DeployServiceCommand(string targetName) : ICommand
         catch (HttpRequestException ex)
         {
             return (null, new ErrorResult($"Connection failed: {ex.Message}. Make sure the deployment service is running.", 1));
+        }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            return (null, new ErrorResult($"Connection timed out. Is the deployment service running at http://localhost:5165?, {ex.Message}", 1));
         }
         catch (OperationCanceledException)
         {
