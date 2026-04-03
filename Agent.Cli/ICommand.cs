@@ -5,6 +5,5 @@ namespace Agent.Cli.Core;
 
 public interface ICommand
 {
-    IAsyncEnumerable<ExecutionEvent> ExecuteStreamingAsync(
-        [EnumeratorCancellation] CancellationToken ct = default);
+    IAsyncEnumerable<ExecutionEvent> ExecuteStreamingAsync(CancellationToken ct = default);
 }
