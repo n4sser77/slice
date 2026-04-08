@@ -1,3 +1,4 @@
+using System.Net;
 using Agent.Serialization;
 using Agent.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -41,7 +42,8 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (IFormFile file
 
         var dllPath = Path.Combine(Path.GetFullPath(uploadPath), dllName + ".dll");
         if (!File.Exists(dllPath))
-            return Results.BadRequest($"No runnable DLL '{dllName}.dll' found in uploaded archive.");
+            return Results.Problem(detail: $"No runnable DLL '{dllName}.dll' found in uploaded archive.",
+                                   statusCode: (int)HttpStatusCode.BadRequest);
 
         await processRunner.CreateSystemdService(appSafePath, dllName);
 
@@ -49,11 +51,23 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (IFormFile file
     }
     catch (ArgumentException ex)
     {
-        return Results.BadRequest(ex.Message);
+        return Results.Problem(detail: ex.Message,
+                               statusCode: (int)HttpStatusCode.BadRequest);
     }
 }).DisableAntiforgery();
 
+app.MapGet("v1/services", async (ProcessManager processRunner) =>
+{
+    try
+    {
 
+    }
+    catch (System.Exception)
+    {
+
+        throw;
+    }
+});
 
 app.Run();
 
