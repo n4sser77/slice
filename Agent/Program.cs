@@ -60,9 +60,10 @@ app.MapGet("v1/services", async (ProcessManager processRunner) =>
 {
     try
     {
-
+        var services = await processRunner.GetServices();
+        return Results.Ok(services);
     }
-    catch (System.Exception)
+    catch (Exception)
     {
 
         throw;

@@ -15,7 +15,7 @@ public class ProcessManager
         _targetDir = targetDir;
         _portManager = portManager;
     }
-    public async Task<List<SystemdService>> ListServices()
+    public async Task<List<SystemdService>> GetServices()
     {
         var psi = new ProcessStartInfo
         {
