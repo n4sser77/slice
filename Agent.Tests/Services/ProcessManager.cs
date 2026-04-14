@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Agent.Models;
+using Slice.Common.Models;
 using Agent.Serialization;
 using Agent.Services;
 namespace Agent.Tests.Services;
