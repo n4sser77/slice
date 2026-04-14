@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Agent.Models;
+using Slice.Common.Models;
 using Agent.Serialization;
 
 namespace Agent.Services;
@@ -20,7 +20,7 @@ public class ProcessManager
         var psi = new ProcessStartInfo
         {
             FileName = "systemctl",
-            Arguments = "--user list-units \"slice*\" --type=service --all --output=json --no-pager",
+            Arguments = "--user list-units \"slice-*\" --type=service --all --output=json --no-pager",
             RedirectStandardOutput = true,
             UseShellExecute = false,
             CreateNoWindow = true
@@ -30,10 +30,7 @@ public class ProcessManager
         if (process == null) return [];
         string output = await process.StandardOutput.ReadToEndAsync();
 
-        List<SystemdService> services = JsonSerializer.Deserialize(output, AppJsonContext.Default.ListSystemdService)
-            ?? [];
-
-        return [.. services.Where(s => s.Unit.StartsWith("slice-", StringComparison.OrdinalIgnoreCase))];
+        return JsonSerializer.Deserialize(output, AppJsonContext.Default.ListSystemdService) ?? [];
 
     }
     private Task RunService(string appName)

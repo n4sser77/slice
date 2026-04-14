@@ -54,20 +54,16 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (IFormFile file
         return Results.Problem(detail: ex.Message,
                                statusCode: (int)HttpStatusCode.BadRequest);
     }
+    catch (InvalidDataException ex)
+    {
+        return Results.Problem(detail: ex.Message, statusCode: (int)HttpStatusCode.BadRequest);
+    }
 }).DisableAntiforgery();
 
 app.MapGet("v1/services", async (ProcessManager processRunner) =>
 {
-    try
-    {
-        var services = await processRunner.GetServices();
-        return Results.Ok(services);
-    }
-    catch (Exception)
-    {
-
-        throw;
-    }
+    var services = await processRunner.GetServices();
+    return Results.Ok(services);
 });
 
 app.Run();

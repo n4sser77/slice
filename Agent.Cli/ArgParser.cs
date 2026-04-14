@@ -12,8 +12,11 @@ public class ArgParser
         if (args.Length == 0)
             return null;
 
-        if (args.Length == 1)
-            return new DeployServiceCommand(args[0]);
+        if (args.Length == 2 && args[0] == "deploy")
+            return new DeployServiceCommand(args[1]);
+
+        if (args.Length == 1 && args[0] == "list")
+            return new GetServicesCommand();
 
         return null;
     }

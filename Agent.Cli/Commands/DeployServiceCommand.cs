@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Runtime.CompilerServices;
 using Agent.Cli.Core;
 using Agent.Cli.Core.Events;
 using Agent.Cli.Core.Results;
@@ -10,7 +11,7 @@ namespace Agent.Cli.Commands;
 public class DeployServiceCommand(string targetName) : ICommand
 {
     public async IAsyncEnumerable<ExecutionEvent> ExecuteStreamingAsync(
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         // Step 1: Find project
         yield return new StepStarted("Finding project files");
@@ -130,15 +131,16 @@ public class DeployServiceCommand(string targetName) : ICommand
         try
         {
             var ms = new MemoryStream();
-            using var arc = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true);
-
-            var files = Directory.GetFiles(publishPath);
-            foreach (var file in files)
+            using (var arc = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
             {
-                var entry = arc.CreateEntry(Path.GetFileName(file));
-                using var entryStream = entry.Open();
-                using var fs = File.OpenRead(file);
-                fs.CopyTo(entryStream);
+                var files = Directory.EnumerateFiles(publishPath);
+                foreach (var file in files)
+                {
+                    var entry = arc.CreateEntry(Path.GetFileName(file));
+                    using var entryStream = entry.Open();
+                    using var fs = File.OpenRead(file);
+                    fs.CopyTo(entryStream);
+                }
             }
 
             ms.Position = 0;
@@ -156,18 +158,21 @@ public class DeployServiceCommand(string targetName) : ICommand
     {
         try
         {
-            using var client = new HttpClient { BaseAddress = new("http://localhost:5165/v1/"), Timeout = TimeSpan.FromSeconds(60) };
+            using var client = new HttpClient
+            {
+                BaseAddress = new("http://localhost:5165/v1/"),
+                Timeout = TimeSpan.FromSeconds(10)
+            };
 
             using var content = new ProgressStreamContent(zipStream);
             using var multipart = new MultipartFormDataContent();
             multipart.Add(content, "file", fileName);
-            client.Timeout = TimeSpan.FromSeconds(10);
             var uploadResult = await client.PostAsync("services", multipart, ct);
 
             if (!uploadResult.IsSuccessStatusCode)
             {
                 var error = await uploadResult.Content.ReadAsStringAsync();
-                return (null, new ErrorResult($"Connection failed: {uploadResult.StatusCode}. Make sure the deployment service is running.", 1));
+                return (null, new ErrorResult($"Error: {uploadResult.StatusCode}. {error}"));
             }
 
             var response = await uploadResult.Content.ReadAsStringAsync();

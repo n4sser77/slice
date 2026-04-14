@@ -1,8 +1,10 @@
 using System.Text.Json.Serialization;
-using Agent.Models;
+using Slice.Common.Models;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Agent.Serialization;
 
+[JsonSerializable(typeof(ProblemDetails))]
 [JsonSerializable(typeof(AppService))]
 [JsonSerializable(typeof(List<AppService>))]
 [JsonSerializable(typeof(SystemdService))]
