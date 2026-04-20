@@ -1,19 +1,18 @@
+using Agent.Cli;
 using Agent.Cli.Commands;
-using Agent.Cli.Core;
-using Agent.Cli.Help;
-using Agent.Cli.Presentation;
+using Microsoft.Extensions.DependencyInjection;
+using System.CommandLine;
 
-ArgParser parser = new();
+var config = CliConfig.Default;
 
-ICommand? command = parser.ParseArgs(args);
+var services = new ServiceCollection()
+    .AddSingleton(new HttpClient { BaseAddress = config.BaseAddress, Timeout = TimeSpan.FromSeconds(30) })
+    .BuildServiceProvider();
 
-if (command is null)
-{
-    HelpDisplay.ShowError("No valid command provided");
-    return 1;
-}
+var httpClient = services.GetRequiredService<HttpClient>();
 
-var events = command.ExecuteStreamingAsync();
-int exitCode = await ConsoleRenderer.RenderAsync(events);
+var root = new RootCommand("slice — deploy and manage .NET services");
+DeployServiceCommand.Register(root, httpClient);
+GetServicesCommand.Register(root, httpClient);
 
-return exitCode;
+return await root.Parse(args).InvokeAsync();

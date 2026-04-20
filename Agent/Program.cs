@@ -62,9 +62,15 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (IFormFile file
 
 app.MapGet("v1/services", async (ProcessManager processRunner) =>
 {
-    var services = await processRunner.GetServices();
-    return Results.Ok(services);
+    try
+    {
+        var services = await processRunner.GetServices();
+        return Results.Ok(services);
+    }
+    catch (ProcessManager.SystemctlException ex)
+    {
+        return Results.Problem(detail: ex.Message, statusCode: (int)HttpStatusCode.InternalServerError);
+    }
 });
 
 app.Run();
-

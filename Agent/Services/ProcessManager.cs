@@ -9,30 +9,51 @@ public class ProcessManager
 {
     private readonly string _targetDir;
     private readonly IPortManager _portManager;
+    private readonly string _systemctlBinary;
 
-    public ProcessManager(string targetDir, IPortManager portManager)
+    public ProcessManager(string targetDir, IPortManager portManager, string systemctlBinary = "systemctl")
     {
         _targetDir = targetDir;
         _portManager = portManager;
+        _systemctlBinary = systemctlBinary;
     }
+
     public async Task<List<SystemdService>> GetServices()
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "systemctl",
-            Arguments = "--user list-units \"slice-*\" --type=service --all --output=json --no-pager",
+            FileName = _systemctlBinary,
+            Arguments = "--user list-units --type=service --all --output=json --no-pager slice-*.service",
             RedirectStandardOutput = true,
+            RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
 
         using var process = Process.Start(psi);
-        if (process == null) return [];
+        if (process == null)
+            throw new SystemctlException("Failed to start systemctl for service discovery.");
+
         string output = await process.StandardOutput.ReadToEndAsync();
+        string error = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
 
-        return JsonSerializer.Deserialize(output, AppJsonContext.Default.ListSystemdService) ?? [];
+        if (process.ExitCode != 0)
+            throw new SystemctlException($"systemctl failed while listing services: {error.Trim()}");
 
+        var services = JsonSerializer.Deserialize(output, AppJsonContext.Default.ListSystemdService) ?? [];
+
+        return
+        [
+            .. services
+                .Where(static s =>
+                    !string.IsNullOrWhiteSpace(s.Unit) &&
+                    s.Unit.StartsWith("slice-", StringComparison.Ordinal) &&
+                    s.Unit.EndsWith(".service", StringComparison.Ordinal))
+                .OrderBy(static s => s.Unit, StringComparer.Ordinal)
+        ];
     }
+
     private Task RunService(string appName)
     {
         RunSystemctlUser("daemon-reload");
@@ -47,7 +68,7 @@ public class ProcessManager
     {
         using var process = Process.Start(new ProcessStartInfo
         {
-            FileName = "systemctl",
+            FileName = _systemctlBinary,
             Arguments = $"--user is-active {appName}.service",
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -58,7 +79,7 @@ public class ProcessManager
 
     private void RunSystemctlUser(string args) => Process.Start(new ProcessStartInfo
     {
-        FileName = "systemctl",
+        FileName = _systemctlBinary,
         Arguments = $"--user {args}",
         UseShellExecute = false,
         CreateNoWindow = true,
@@ -119,5 +140,11 @@ public class ProcessManager
         public OutOfPortsException() : base("No available ports left in the allocated range (5001-5050).") { }
         public OutOfPortsException(string message) : base(message) { }
         public OutOfPortsException(string message, Exception inner) : base(message, inner) { }
+    }
+
+    public sealed class SystemctlException : Exception
+    {
+        public SystemctlException(string message) : base(message) { }
+        public SystemctlException(string message, Exception innerException) : base(message, innerException) { }
     }
 }

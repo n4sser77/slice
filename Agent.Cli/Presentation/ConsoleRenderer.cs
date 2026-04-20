@@ -1,5 +1,6 @@
 using Agent.Cli.Core.Events;
 using Agent.Cli.Core.Results;
+using Spectre.Console;
 
 namespace Agent.Cli.Presentation;
 
@@ -20,6 +21,7 @@ public static class ConsoleRenderer
                 StepFailed f => RenderStepFailed(f),
                 StatusMessage m => RenderStatusMessage(m),
                 ProgressUpdate p => RenderProgressUpdate(p),
+                ServicesListed s => RenderServicesListed(s),
                 DebugEvent d => RenderDebugEvent(d),
                 FinalResult f => RenderFinalResult(f),
                 _ => 0
@@ -68,6 +70,50 @@ public static class ConsoleRenderer
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.WriteLine($"  [DEBUG] {d.Message}");
         Console.ResetColor();
+        return 0;
+    }
+
+    private static int RenderServicesListed(ServicesListed listed)
+    {
+        if (listed.Services.Count == 0)
+        {
+            AnsiConsole.MarkupLine("[yellow]No slice services found.[/]");
+            return 0;
+        }
+
+        var table = new Table().Border(TableBorder.Rounded);
+        table.AddColumn("UNIT");
+        table.AddColumn("ACTIVE");
+        table.AddColumn("SUB");
+        table.AddColumn("DESCRIPTION");
+
+        foreach (var service in listed.Services.OrderBy(static s => s.Unit, StringComparer.Ordinal))
+        {
+            string activeStatus = service.Active ?? "-";
+
+            if (activeStatus.Equals("active", StringComparison.OrdinalIgnoreCase))
+            {
+                activeStatus = $"[green]{activeStatus}[/]";
+            }
+
+            string subStatus = service.Sub ?? "-";
+            if (subStatus.Equals("running", StringComparison.OrdinalIgnoreCase))
+            {
+                subStatus = $"[green]{subStatus}[/]";
+            }
+            else if (subStatus.Equals("failed", StringComparison.OrdinalIgnoreCase))
+            {
+                subStatus = $"[red]{subStatus}[/]";
+            }
+
+            table.AddRow(
+                string.IsNullOrWhiteSpace(service.Unit) ? "-" : service.Unit,
+                activeStatus,
+                subStatus,
+                string.IsNullOrWhiteSpace(service.Description) ? "-" : service.Description);
+        }
+
+        AnsiConsole.Write(table);
         return 0;
     }
 
