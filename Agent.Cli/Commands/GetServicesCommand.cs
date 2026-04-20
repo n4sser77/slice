@@ -1,16 +1,29 @@
+using System.CommandLine;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using Agent.Cli.Core;
 using Agent.Cli.Core.Events;
 using Agent.Cli.Core.Results;
+using Agent.Cli.Presentation;
 using Agent.Cli.Serialization;
 using Slice.Common.Models;
 
 namespace Agent.Cli.Commands;
 
-public class GetServicesCommand : ICommand
+public class GetServicesCommand(HttpClient httpClient) : ICommand
 {
+    public static void Register(RootCommand root, HttpClient httpClient)
+    {
+        var command = new Command("list", "List all deployed services");
+
+        command.SetAction(async (parseResult, ct) =>
+        {
+            var cmd = new GetServicesCommand(httpClient);
+            return await ConsoleRenderer.RenderAsync(cmd.ExecuteStreamingAsync(ct), ct);
+        });
+
+        root.Subcommands.Add(command);
+    }
 
     public async IAsyncEnumerable<ExecutionEvent> ExecuteStreamingAsync(
             [EnumeratorCancellation] CancellationToken ct = default)
@@ -22,28 +35,28 @@ public class GetServicesCommand : ICommand
             yield break;
         }
 
-        yield return new FinalResult(new SuccessResult(JsonSerializer.Serialize(res, CliJsonContext.Default.ListSystemdService)));
-
+        yield return new ServicesListed(res!);
     }
 
     private async Task<(List<SystemdService>? services, ErrorResult? error)> TryGetServices(CancellationToken ct = default)
     {
         try
         {
-            using var client = new HttpClient
-            {
-                BaseAddress = new("http://localhost:5165/v1/"),
-                Timeout = TimeSpan.FromSeconds(15)
-            };
-            var getServicesResults = await client.GetAsync("services");
+            var getServicesResults = await httpClient.GetAsync("services", ct);
 
             if (!getServicesResults.IsSuccessStatusCode)
             {
                 var errorContent = await getServicesResults.Content.ReadAsStringAsync();
-                return (null, new ErrorResult($"Error with upstream: {getServicesResults.StatusCode}. Details: {errorContent} - {getServicesResults.ReasonPhrase}"));
+                var msg = $"Error with upstream: {getServicesResults.StatusCode}. Details: {errorContent} - {getServicesResults.ReasonPhrase}";
+                return (null, new ErrorResult(msg));
             }
 
             var content = await getServicesResults.Content.ReadFromJsonAsync(CliJsonContext.Default.ListSystemdService, ct);
+            if (content is null)
+            {
+                return (null, new ErrorResult("Invalid response payload: expected a JSON array of services.", 1));
+            }
+
             return (content, null);
 
         }
@@ -59,10 +72,13 @@ public class GetServicesCommand : ICommand
         {
             return (null, new ErrorResult("Cancelled", 1));
         }
-        catch (Exception ex)
+        catch (NotSupportedException ex)
         {
-            return (null, new ErrorResult(ex.Message, 1));
+            return (null, new ErrorResult($"Invalid response content type: {ex.Message}", 1));
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            return (null, new ErrorResult($"Invalid response JSON: {ex.Message}", 1));
         }
     }
 }
-

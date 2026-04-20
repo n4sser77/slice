@@ -1,6 +1,3 @@
-using System.Text.Json;
-using Slice.Common.Models;
-using Agent.Serialization;
 using Agent.Services;
 namespace Agent.Tests.Services;
 
@@ -85,4 +82,113 @@ public class ProcessManagerTests : IDisposable
     //     Assert.True(services.Count > 0);
     //     Console.WriteLine(JsonSerializer.Serialize(services, AppJsonContext.Default.ListSystemdService));
     // }
+
+    [Fact]
+    public async Task GetServices_FiltersAndSortsSliceServices()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"slice-systemctl-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var scriptPath = Path.Combine(tempDir, "fake-systemctl.sh");
+            File.WriteAllText(scriptPath,
+                """
+                #!/usr/bin/env bash
+                cat <<'JSON'
+                [
+                  {"Unit":"slice-z.service","Loaded":"loaded","Active":"active","Sub":"running","Description":"z service"},
+                  {"Unit":"not-slice.service","Loaded":"loaded","Active":"active","Sub":"running","Description":"other service"},
+                  {"Unit":"slice-a.service","Loaded":"loaded","Active":"inactive","Sub":"dead","Description":"a service"},
+                  {"Unit":"slice-a.socket","Loaded":"loaded","Active":"active","Sub":"listening","Description":"a socket"}
+                ]
+                JSON
+                exit 0
+                """);
+            MakeExecutable(scriptPath);
+
+            var sut = new ProcessManager(tempDir, new PortManager(), scriptPath);
+
+            var services = await sut.GetServices();
+
+            Assert.Collection(services,
+                s => Assert.Equal("slice-a.service", s.Unit),
+                s => Assert.Equal("slice-z.service", s.Unit));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task GetServices_ThrowsOnSystemctlFailure()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"slice-systemctl-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var scriptPath = Path.Combine(tempDir, "fake-systemctl.sh");
+            File.WriteAllText(scriptPath,
+                """
+                #!/usr/bin/env bash
+                echo "permission denied" >&2
+                exit 1
+                """);
+            MakeExecutable(scriptPath);
+
+            var sut = new ProcessManager(tempDir, new PortManager(), scriptPath);
+
+            var ex = await Assert.ThrowsAsync<ProcessManager.SystemctlException>(sut.GetServices);
+            Assert.Contains("permission denied", ex.Message);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task GetServices_ReturnsEmptyListWhenNoSliceServices()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"slice-systemctl-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var scriptPath = Path.Combine(tempDir, "fake-systemctl.sh");
+            File.WriteAllText(scriptPath,
+                """
+                #!/usr/bin/env bash
+                cat <<'JSON'
+                [{"Unit":"dbus.service","Loaded":"loaded","Active":"active","Sub":"running","Description":"D-Bus"}]
+                JSON
+                exit 0
+                """);
+            MakeExecutable(scriptPath);
+
+            var sut = new ProcessManager(tempDir, new PortManager(), scriptPath);
+
+            var services = await sut.GetServices();
+            Assert.Empty(services);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    private static void MakeExecutable(string path)
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var mode =
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
+
+        File.SetUnixFileMode(path, mode);
+    }
 }

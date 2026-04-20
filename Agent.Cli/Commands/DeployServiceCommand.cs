@@ -1,15 +1,32 @@
+using System.CommandLine;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using Agent.Cli.Core;
 using Agent.Cli.Core.Events;
 using Agent.Cli.Core.Results;
+using Agent.Cli.Presentation;
 using Agent.Cli.Utils;
 
 namespace Agent.Cli.Commands;
 
-public class DeployServiceCommand(string targetName) : ICommand
+public class DeployServiceCommand(string targetName, HttpClient httpClient) : ICommand
 {
+    public static void Register(RootCommand root, HttpClient httpClient)
+    {
+        var targetArg = new Argument<string>("target") { Description = "The .NET project name or .csproj path to deploy" };
+        var command = new Command("deploy", "Deploy a .NET service") { targetArg };
+
+        command.SetAction(async (parseResult, ct) =>
+        {
+            var cmd = new DeployServiceCommand(parseResult.GetValue(targetArg)!, httpClient);
+            return await ConsoleRenderer.RenderAsync(cmd.ExecuteStreamingAsync(ct), ct);
+        });
+
+        root.Subcommands.Add(command);
+    }
+
+
     public async IAsyncEnumerable<ExecutionEvent> ExecuteStreamingAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -158,16 +175,10 @@ public class DeployServiceCommand(string targetName) : ICommand
     {
         try
         {
-            using var client = new HttpClient
-            {
-                BaseAddress = new("http://localhost:5165/v1/"),
-                Timeout = TimeSpan.FromSeconds(10)
-            };
-
             using var content = new ProgressStreamContent(zipStream);
             using var multipart = new MultipartFormDataContent();
             multipart.Add(content, "file", fileName);
-            var uploadResult = await client.PostAsync("services", multipart, ct);
+            var uploadResult = await httpClient.PostAsync("services", multipart, ct);
 
             if (!uploadResult.IsSuccessStatusCode)
             {
