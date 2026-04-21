@@ -8,7 +8,9 @@
       "launchUrl": "todos",
       "applicationUrl": "http://localhost:5165",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "EASY_DOTNET_HOOK_DEBUG": "1",
+        "EASY_DOTNET_HOOK_LOG_FILE": "/tmp/easy-dotnet-hook.log"                                                                                                                        
       }
     }
   }

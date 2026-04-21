@@ -5,7 +5,7 @@ namespace Agent.Tests;
 public class ZipExtractorTests
 {
     [Fact]
-    public void ReadAndUnzip_ShouldExtractFilesToCorrectLocation()
+    public async Task ReadAndUnzip_ShouldExtractFilesToCorrectLocationAsync()
     {
         // ARRANGE
         string uniqueId = Guid.NewGuid().ToString();
@@ -33,7 +33,7 @@ public class ZipExtractorTests
         using (var zipToRead = new FileStream(zipPath, FileMode.Open, FileAccess.Read))
         {
             // Antar att ReadAndUnzip tar (stream, targetPath)
-            z.ReadAndUnzip(zipToRead, extractDir);
+            await z.ReadAndUnzip(zipToRead, extractDir);
         }
 
         // ASSERT
