@@ -102,6 +102,7 @@ public class ProcessManager
 
         await RunService(appName);
     }
+
     private (string, string) ConstructCustomDomainUrl(string appName, int port)
     {
         var domain = appName.ToString() + ".localhost";
@@ -109,29 +110,32 @@ public class ProcessManager
         return (domain, url);
     }
 
-
     private string ConstructServicefile(string appName, string dllName, string appDir, int port)
     {
-
         var (domain, url) = ConstructCustomDomainUrl(appName, port);
+        var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT")
+            ?? throw new InvalidOperationException("DOTNET_ROOT is not set. Ensure dotnet is installed and DOTNET_ROOT is configured.");
+        var dotnetExe = Path.Combine(dotnetRoot, "dotnet");
         return
         $"""
         [Unit]
         Description=Uploaded C# Service: {appName}
-        Environment=ASPNETCORE_HTTP_PORTS={port}
+
         [Service]
         WorkingDirectory={appDir}
-        ExecStart=/usr/bin/dotnet {appDir}/{dllName}.dll
+        ExecStart={dotnetExe} {appDir}/{dllName}.dll
         Restart=always
         NoNewPrivileges=true
         PrivateTmp=true
 
+        Environment=ASPNETCORE_HTTP_PORTS={port}
         Environment=ASPNETCORE_URLS={url}
         Environment=ASPNETCORE_ENVIRONMENT=Production
         Environment=ASPNETCORE_HOSTFILTERING__ALLOWEDHOSTS={domain}
+        Environment=DOTNET_ROOT={dotnetRoot}
 
         [Install]
-        WantedBy=multi-user.target
+        WantedBy=default.target
         """;
     }
 
