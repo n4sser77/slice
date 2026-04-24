@@ -17,6 +17,9 @@
     <Nullable>enable</Nullable>
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>slice</ToolCommandName>
+    <PackageId>slice</PackageId>
   </PropertyGroup>
 
 </Project>

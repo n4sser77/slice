@@ -6,83 +6,77 @@ Built for a Raspberry Pi 5 but works on any Linux machine.
 
 ---
 
-## What it does
-
-You zip your app, run one command, and it shows up as a running systemd service with its own port. That's it.
-
-```
-dotnet run --project Agent.Cli -- deploy MyApp
-```
-
----
-
 ## How it works
 
-There are two parts:
+Two parts:
 
 - **Agent** — a minimal API that runs on your server. It receives deployments, writes systemd service files, and manages the lifecycle of your apps.
 - **CLI** — what you run from your machine to talk to the agent.
 
 ---
 
-## Requirements
+## Option A — Just want to try it or use it?
 
-- Linux (or WSL if you're on Windows — it needs systemd)
-- .NET 10 SDK
-- `dotnet` available at `/usr/bin/dotnet` — if you're using mise or a version manager, symlink it:
+> The CLI is not published to NuGet yet. Until then, clone the repo and build it yourself — it's a one time thing.
+
+Clone and install:
 
 ```bash
-sudo ln -s /home/$USER/.local/share/mise/dotnet-root/dotnet /usr/bin/dotnet
+git clone https://github.com/n4sser77/slice.git
+cd slice
+dotnet pack Agent.Cli --configuration Release
+dotnet tool install --global --add-source ./Agent.Cli/bin/Release slice
 ```
+
+Once installed, the `slice` command is available everywhere on your machine:
+
+```bash
+slice deploy MyApp
+slice list
+slice status MyApp
+```
+
+The CLI packages your app, sends it to the agent running on your server, and the agent handles the rest — systemd service, port, everything.
+
+**The agent needs to be running on your server first.** See [Docs/server-setup.md](Docs/server-setup.md) for how to get it running.
 
 ---
 
-## Quickstart
+## Option B — Want to run it locally or contribute?
 
-**1. Start the agent**
+> You need Linux or WSL for this. The agent talks directly to systemd, so it won't work on plain Windows or macOS.
+
+Clone the repo and use `dotnet run` directly — no install needed:
 
 ```bash
+# terminal 1: start the agent (runs on http://localhost:5165)
 dotnet run --project Agent
-```
 
-It runs on `http://localhost:5165` by default.
-
-**2. Deploy an app**
-
-```bash
+# terminal 2: use the CLI against the local agent
 dotnet run --project Agent.Cli -- deploy MyApp
-```
-
-Point it at a project folder. The CLI builds it, zips it, and uploads it to the agent.
-
-**3. Check what's running**
-
-```bash
 dotnet run --project Agent.Cli -- list
-```
 
----
-
-## Run the tests
-
-```bash
+# run the tests
 dotnet test
 ```
-
----
-
-## Notes
-
-Things learned while building this — systemd internals, process management in C#, testing strategies: [notes.md](notes.md)
 
 ---
 
 ## Project structure
 
 ```
-Agent/        the server — minimal API, manages systemd services
-Agent.Cli/    the CLI — deploy, list, inspect
-Common/       shared models between agent and CLI
+Agent/          the server — minimal API, manages systemd services
+Agent.Cli/      the CLI — deploy, list, inspect
+Common/         shared models between agent and CLI
 Agent.Tests/
 Agent.Cli.Tests/
+Docs/           server setup, roadmap, learning notes
 ```
+
+---
+
+## Docs
+
+- [Server setup](Docs/server-setup.md) — get the agent running on your server
+- [Roadmap](Docs/roadmap.md) — web client, GitHub integration, CLI as a portable deploy tool
+- [Notes](Docs/notes.md) — things learned while building this
