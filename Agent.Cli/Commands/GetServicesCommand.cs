@@ -36,6 +36,7 @@ public class GetServicesCommand(HttpClient httpClient) : ICommand
         }
 
         yield return new ServicesListed(res!);
+        yield return new FinalResult(new SuccessResult("Listed services."));
     }
 
     private async Task<(List<SystemdService>? services, ErrorResult? error)> TryGetServices(CancellationToken ct = default)

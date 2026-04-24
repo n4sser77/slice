@@ -1,99 +1,117 @@
 using Agent.Services;
+using Agent.Services.Exceptions;
 namespace Agent.Tests.Services;
 
 public class ProcessManagerTests : IDisposable
 {
-    private readonly ProcessManager _sut;
-    private static readonly string systemdPath =
-       Path.Combine(Path.GetTempPath(), "slice-systemd-tests");
+  private readonly ProcessManager _sut;
+  private static readonly string systemdPath =
+     Path.Combine(Path.GetTempPath(), "slice-systemd-tests");
 
-    public ProcessManagerTests()
+  public ProcessManagerTests()
+  {
+    Directory.CreateDirectory(systemdPath);
+    _sut = new ProcessManager(systemdPath, new PortManager());
+  }
+
+  public void Dispose()
+  {
+    if (Directory.Exists(systemdPath))
+      Directory.Delete(systemdPath, true);
+  }
+
+  [Fact]
+  public async Task CreateSystemdService_CreatesServiceFileAsync()
+  {
+    string appName = "slice-testapp";
+    var path = Path.Combine(systemdPath, "slice-testapp.service");
+
+    await _sut.CreateSystemdService(appName, "testapp");
+
+    Assert.True(File.Exists(path));
+  }
+
+  [Fact]
+  public async Task CreateSystemdService_ContainsSecurityHardening()
+  {
+    string appName = "slice-testapp";
+    var path = Path.Combine(systemdPath, "slice-testapp.service");
+
+    await _sut.CreateSystemdService(appName, "testapp");
+
+    var content = File.ReadAllText(path);
+    Assert.Contains("NoNewPrivileges=true", content);
+    Assert.Contains("PrivateTmp=true", content);
+  }
+
+  [Fact]
+  public async Task CreateSystemdService_ServiceRunsTheUploadedDll()
+  {
+    string appName = "slice-myapp";
+    string dllName = "myapp";
+    var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? "/fake/dotnet";
+    var path = Path.Combine(systemdPath, "slice-myapp.service");
+
+    await _sut.CreateSystemdService(appName, dllName);
+
+    var content = File.ReadAllText(path);
+    Assert.Contains($"Description=Uploaded C# Service: {appName}", content);
+    Assert.Contains($"ExecStart={dotnetRoot}/dotnet", content);
+    Assert.Contains($"{dllName}.dll", content);
+    Assert.Contains($"DOTNET_ROOT={dotnetRoot}", content);
+  }
+
+  [Fact]
+  public async Task CreateSystemdService_ThrowsWhenDotnetRootIsNotSet()
+  {
+    var previous = Environment.GetEnvironmentVariable("DOTNET_ROOT");
+    Environment.SetEnvironmentVariable("DOTNET_ROOT", null);
+    try
     {
-        Directory.CreateDirectory(systemdPath);
-        _sut = new ProcessManager(systemdPath, new PortManager());
+      await Assert.ThrowsAsync<InvalidOperationException>(
+          () => _sut.CreateSystemdService("slice-myapp", "myapp"));
     }
-
-    public void Dispose()
+    finally
     {
-        if (Directory.Exists(systemdPath))
-            Directory.Delete(systemdPath, true);
+      Environment.SetEnvironmentVariable("DOTNET_ROOT", previous);
     }
+  }
 
-    [Fact]
-    public async Task CreateSystemdService_CreatesServiceFileAsync()
+  [Fact]
+  public async Task CreateSystemdService_OverwritesExistingServiceFile()
+  {
+    string appName = "slice-testapp";
+    var path = Path.Combine(systemdPath, "slice-testapp.service");
+
+    await _sut.CreateSystemdService(appName, "v1dll");
+    await _sut.CreateSystemdService(appName, "v2dll");
+
+    var content = File.ReadAllText(path);
+    Assert.Contains("v2dll.dll", content);
+    Assert.DoesNotContain("v1dll.dll", content);
+  }
+
+  // [Fact]
+  // [Trait("Category", "Integration")]
+  // public async Task ListServices_GetsAllServicesFromSystemd()
+  // {
+  //     List<SystemdService> services = await _sut.ListServices();
+  //
+  //     Assert.True(services.Count > 0);
+  //     Console.WriteLine(JsonSerializer.Serialize(services, AppJsonContext.Default.ListSystemdService));
+  // }
+
+  [Fact]
+  public async Task GetServices_FiltersAndSortsSliceServices()
+  {
+    var tempDir = Path.Combine(Path.GetTempPath(), $"slice-systemctl-test-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(tempDir);
+
+    try
     {
-        string appName = "slice-testapp";
-        var path = Path.Combine(systemdPath, "slice-testapp.service");
-
-        await _sut.CreateSystemdService(appName, "testapp");
-
-        Assert.True(File.Exists(path));
-    }
-
-    [Fact]
-    public async Task CreateSystemdService_ContainsSecurityHardening()
-    {
-        string appName = "slice-testapp";
-        var path = Path.Combine(systemdPath, "slice-testapp.service");
-
-        await _sut.CreateSystemdService(appName, "testapp");
-
-        var content = File.ReadAllText(path);
-        Assert.Contains("NoNewPrivileges=true", content);
-        Assert.Contains("PrivateTmp=true", content);
-    }
-
-    [Fact]
-    public async Task CreateSystemdService_UsesAppNameInServiceFileAsync()
-    {
-        string appName = "slice-myapp";
-        string dllName = "myapp";
-        var path = Path.Combine(systemdPath, "slice-myapp.service");
-
-        await _sut.CreateSystemdService(appName, dllName);
-
-        var content = File.ReadAllText(path);
-        Assert.Contains("Description=Uploaded C# Service: slice-myapp", content);
-        Assert.Contains($"WorkingDirectory=", content);
-        Assert.Contains($"ExecStart=/usr/bin/dotnet", content);
-        Assert.Contains($"{dllName}.dll", content);
-    }
-
-    [Fact]
-    public async Task CreateSystemdService_OverwritesExistingServiceFile()
-    {
-        string appName = "slice-testapp";
-        var path = Path.Combine(systemdPath, "slice-testapp.service");
-
-        await _sut.CreateSystemdService(appName, "v1dll");
-        await _sut.CreateSystemdService(appName, "v2dll");
-
-        var content = File.ReadAllText(path);
-        Assert.Contains("v2dll.dll", content);
-        Assert.DoesNotContain("v1dll.dll", content);
-    }
-
-    // [Fact]
-    // [Trait("Category", "Integration")]
-    // public async Task ListServices_GetsAllServicesFromSystemd()
-    // {
-    //     List<SystemdService> services = await _sut.ListServices();
-    //
-    //     Assert.True(services.Count > 0);
-    //     Console.WriteLine(JsonSerializer.Serialize(services, AppJsonContext.Default.ListSystemdService));
-    // }
-
-    [Fact]
-    public async Task GetServices_FiltersAndSortsSliceServices()
-    {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"slice-systemctl-test-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(tempDir);
-
-        try
-        {
-            var scriptPath = Path.Combine(tempDir, "fake-systemctl.sh");
-            File.WriteAllText(scriptPath,
-                """
+      var scriptPath = Path.Combine(tempDir, "fake-systemctl.sh");
+      File.WriteAllText(scriptPath,
+          """
                 #!/usr/bin/env bash
                 cat <<'JSON'
                 [
@@ -105,90 +123,90 @@ public class ProcessManagerTests : IDisposable
                 JSON
                 exit 0
                 """);
-            MakeExecutable(scriptPath);
+      MakeExecutable(scriptPath);
 
-            var sut = new ProcessManager(tempDir, new PortManager(), scriptPath);
+      var sut = new ProcessManager(tempDir, new PortManager(), scriptPath);
 
-            var services = await sut.GetServices();
+      var services = await sut.GetServices();
 
-            Assert.Collection(services,
-                s => Assert.Equal("slice-a.service", s.Unit),
-                s => Assert.Equal("slice-z.service", s.Unit));
-        }
-        finally
-        {
-            Directory.Delete(tempDir, true);
-        }
+      Assert.Collection(services,
+          s => Assert.Equal("slice-a.service", s.Unit),
+          s => Assert.Equal("slice-z.service", s.Unit));
     }
-
-    [Fact]
-    public async Task GetServices_ThrowsOnSystemctlFailure()
+    finally
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"slice-systemctl-test-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(tempDir);
+      Directory.Delete(tempDir, true);
+    }
+  }
 
-        try
-        {
-            var scriptPath = Path.Combine(tempDir, "fake-systemctl.sh");
-            File.WriteAllText(scriptPath,
-                """
+  [Fact]
+  public async Task GetServices_ThrowsOnSystemctlFailure()
+  {
+    var tempDir = Path.Combine(Path.GetTempPath(), $"slice-systemctl-test-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(tempDir);
+
+    try
+    {
+      var scriptPath = Path.Combine(tempDir, "fake-systemctl.sh");
+      File.WriteAllText(scriptPath,
+          """
                 #!/usr/bin/env bash
                 echo "permission denied" >&2
                 exit 1
                 """);
-            MakeExecutable(scriptPath);
+      MakeExecutable(scriptPath);
 
-            var sut = new ProcessManager(tempDir, new PortManager(), scriptPath);
+      var sut = new ProcessManager(tempDir, new PortManager(), scriptPath);
 
-            var ex = await Assert.ThrowsAsync<ProcessManager.SystemctlException>(sut.GetServices);
-            Assert.Contains("permission denied", ex.Message);
-        }
-        finally
-        {
-            Directory.Delete(tempDir, true);
-        }
+      var ex = await Assert.ThrowsAsync<SystemctlException>(sut.GetServices);
+      Assert.Contains("permission denied", ex.Message);
     }
-
-    [Fact]
-    public async Task GetServices_ReturnsEmptyListWhenNoSliceServices()
+    finally
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"slice-systemctl-test-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(tempDir);
+      Directory.Delete(tempDir, true);
+    }
+  }
 
-        try
-        {
-            var scriptPath = Path.Combine(tempDir, "fake-systemctl.sh");
-            File.WriteAllText(scriptPath,
-                """
+  [Fact]
+  public async Task GetServices_ReturnsEmptyListWhenNoSliceServices()
+  {
+    var tempDir = Path.Combine(Path.GetTempPath(), $"slice-systemctl-test-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(tempDir);
+
+    try
+    {
+      var scriptPath = Path.Combine(tempDir, "fake-systemctl.sh");
+      File.WriteAllText(scriptPath,
+          """
                 #!/usr/bin/env bash
                 cat <<'JSON'
                 [{"Unit":"dbus.service","Loaded":"loaded","Active":"active","Sub":"running","Description":"D-Bus"}]
                 JSON
                 exit 0
                 """);
-            MakeExecutable(scriptPath);
+      MakeExecutable(scriptPath);
 
-            var sut = new ProcessManager(tempDir, new PortManager(), scriptPath);
+      var sut = new ProcessManager(tempDir, new PortManager(), scriptPath);
 
-            var services = await sut.GetServices();
-            Assert.Empty(services);
-        }
-        finally
-        {
-            Directory.Delete(tempDir, true);
-        }
+      var services = await sut.GetServices();
+      Assert.Empty(services);
     }
-
-    private static void MakeExecutable(string path)
+    finally
     {
-        if (OperatingSystem.IsWindows())
-            return;
-
-        var mode =
-            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
-            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
-            UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
-
-        File.SetUnixFileMode(path, mode);
+      Directory.Delete(tempDir, true);
     }
+  }
+
+  private static void MakeExecutable(string path)
+  {
+    if (OperatingSystem.IsWindows())
+      return;
+
+    var mode =
+        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+        UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+        UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
+
+    File.SetUnixFileMode(path, mode);
+  }
 }

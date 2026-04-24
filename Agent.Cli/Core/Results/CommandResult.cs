@@ -1,5 +1,3 @@
-using System;
-
 namespace Agent.Cli.Core.Results;
 
 public abstract record CommandResult;
