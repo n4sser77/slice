@@ -1,5 +1,19 @@
 # Things I've Learned
 
+## AOT vs JIT — considerations for this project
+
+AOT (Ahead-of-Time compilation) produces a native binary with no runtime dependency and faster startup. Great in theory for a Raspberry Pi with 4GB RAM.
+
+In practice it slowed me down a lot:
+- No runtime reflection means JSON serialization needs source generators everywhere
+- Third-party libraries often aren't AOT-compatible
+- Razor/Blazor support in AOT is limited — makes adding a web client painful
+- Workarounds pile up fast and obscure what the code is actually doing
+
+JIT is fine for a Pi 5. The app is already small, startup time isn't critical, and memory footprint with JIT is still very reasonable. The tradeoff isn't worth it at this stage.
+
+**Consideration:** Disable AOT for the Agent while the project is still moving fast. Revisit when the feature set is stable and the web client is built. AOT makes more sense as an optimization pass at the end, not a constraint throughout development.
+
 ## systemd
 - Services start with a clean environment — shell env vars like `DOTNET_ROOT` are not inherited
 - Every service gets its own cgroup, which is how memory and CPU are tracked per-service
