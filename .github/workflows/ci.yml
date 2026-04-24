@@ -3,8 +3,16 @@ name: .NET 10 Build & Test
 on:
   push:
     branches: ["main"]
+    paths:
+      - "**/*.cs"
+      - "**/*.csproj"
+      - "**/*.slnx"
   pull_request:
     branches: ["main"]
+    paths:
+      - "**/*.cs"
+      - "**/*.csproj"
+      - "**/*.slnx"
 
 jobs:
   build-and-test:
