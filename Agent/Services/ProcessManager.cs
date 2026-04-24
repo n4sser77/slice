@@ -150,48 +150,14 @@ public partial class ProcessManager
       CreateNoWindow = true
     };
 
-    var output = new System.Text.StringBuilder();
-    using var process = new Process() { StartInfo = psi };
-    process.OutputDataReceived += (s, e) =>
-    {
-      if (e.Data is { } l) output.AppendLine(l);
-    };
-    process.ErrorDataReceived += (s, e) =>
-    {
-      if (e.Data is { } l) output.AppendLine(l);
-    };
-    process.Start();
-    process.BeginErrorReadLine();
-    process.BeginOutputReadLine();
+    psi.RedirectStandardOutput = true;
+    psi.RedirectStandardError = true;
+    psi.UseShellExecute = false;
 
+    using var process = Process.Start(psi)!;
+    string output = await process.StandardOutput.ReadToEndAsync();
     await process.WaitForExitAsync();
-    var result = output.ToString();
 
-    return ParseServiceStatus(result);
-
-
-
-  }
-  private ServiceStatus ParseServiceStatus(string systemctlOutput)
-  {
-    var lines = systemctlOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-    var dict = lines.Select(line => line.Split('=', 2))
-                    .Where(parts => parts.Length == 2)
-                    .ToDictionary(parts => parts[0].Trim(), parts => parts[1].Trim());
-
-    return new ServiceStatus
-    {
-      Id = dict.GetValueOrDefault("Id") ?? "",
-      Description = dict.GetValueOrDefault("Description") ?? "",
-      LoadState = dict.GetValueOrDefault("LoadState") ?? "",
-      ActiveState = dict.GetValueOrDefault("ActiveState") ?? "",
-      SubState = dict.GetValueOrDefault("SubState") ?? "",
-      StateChangeTimestamp = dict.GetValueOrDefault("StateChangeTimestamp") ?? "",
-      MainPid = int.TryParse(dict.GetValueOrDefault("MainPid"), out int pid) ? pid : 0,
-      MemoryCurrent = ulong.TryParse(dict.GetValueOrDefault("MemoryCurrent"), out ulong memCur) ? memCur : 0,
-      MemoryPeak = ulong.TryParse(dict.GetValueOrDefault("MemoryPeak"), out ulong memPeak) ? memPeak : 0,
-      CpuUsageInSec = ulong.TryParse(dict.GetValueOrDefault("CpuUsageNsec"), out ulong cpuInSec) ? cpuInSec : 0,
-      Result = dict.GetValueOrDefault("Result") ?? ""
-    };
+    return SystemdOutputParser.ParseServiceStatus(output);
   }
 }
