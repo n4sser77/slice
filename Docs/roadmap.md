@@ -69,6 +69,39 @@ Still need to think through what key/token model fits best for the two different
 
 ---
 
+## Reverse proxy and accessibility
+
+Deploying an app is only half the job. If it's not reachable, it might as well not be running.
+
+Right now the agent assigns a port and the app listens on it. Getting to it from outside requires knowing the port, having it open, and hitting the IP directly. That's fine for local testing but not for anything real.
+
+### Short-term — Caddy (requires Docker)
+
+The simplest path to subdomain routing without touching DNS complexity: require Caddy running on the server (via Docker) and have the agent inject routes into Caddy's config dynamically.
+
+How it would work:
+- During `slice deploy`, pass a `--domain` flag (e.g. `--domain myapp.example.com`) or a subdomain flag that gets appended to a configured host domain
+- The agent registers the route in Caddy via its admin API — no file editing, no restarts
+- Caddy handles TLS automatically via Let's Encrypt
+
+A `slice set domain <app> <domain>` command would let you update the domain for an already-deployed app.
+
+This is the plan for the staging environment on the Raspberry Pi while the core deployment and management features are being built and tested. It's a workaround — takes a Docker dependency but works well enough to unblock real use.
+
+### Long-term — YARP (fully embedded, no external dependencies)
+
+The eventual goal: ship the reverse proxy as part of the agent, no Caddy, no Docker required.
+
+YARP (Yet Another Reverse Proxy) is a .NET library — it can run inside the agent process or as a companion service. The idea:
+- The agent manages YARP routing config the same way it manages systemd service files — programmatically, on deploy
+- Automatic TLS handled by the agent itself, including cert renewal via a background service
+- Install scripts to set up any required CLI tooling
+- No external dependencies, no Docker, nothing to maintain separately
+
+This is an early idea. It might not get built at all, or it might look completely different when it does. Adding it here to capture the thinking, not as a commitment.
+
+---
+
 ## Considered but not started
 
 - Git polling (background service that polls main and auto-deploys) — possible alternative to webhooks, simpler but less immediate
