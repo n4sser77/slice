@@ -139,25 +139,23 @@ public partial class ProcessManager
         WantedBy=default.target
         """;
   }
-  public async Task<ServiceStatus> GetServiceStatusAsync(string serviceName)
+  public async Task<ServiceStatus?> GetServiceStatusAsync(string serviceName)
   {
-    var args = $"show {serviceName}.service --property=id,description,loadstate,activestate,substate,statechangetimestamp,mainpid,memorycurrent,memorypeak,cpuusagensec,result";
-    var psi = new ProcessStartInfo()
+    var args = $"show {serviceName}.service --property=Id,Description,LoadState,ActiveState,SubState,StateChangeTimestamp,MainPID,MemoryCurrent,MemoryPeak,CPUUsageNSec,Result";
+    var psi = new ProcessStartInfo
     {
       FileName = _systemctlBinary,
       Arguments = $"--user {args}",
+      RedirectStandardOutput = true,
       UseShellExecute = false,
       CreateNoWindow = true
     };
-
-    psi.RedirectStandardOutput = true;
-    psi.RedirectStandardError = true;
-    psi.UseShellExecute = false;
 
     using var process = Process.Start(psi)!;
     string output = await process.StandardOutput.ReadToEndAsync();
     await process.WaitForExitAsync();
 
-    return SystemdOutputParser.ParseServiceStatus(output);
+    var status = SystemdOutputParser.ParseServiceStatus(output);
+    return status.LoadState == "not-found" ? null : status;
   }
 }

@@ -11,7 +11,7 @@ public class ServiceStatus
   public int MainPid { get; set; }
   public ulong MemoryCurrent { get; set; }
   public ulong MemoryPeak { get; set; }
-  public ulong CpuUsageInSec { get; set; }
+  public ulong CpuUsageNSec { get; set; }
   public string StateChangeTimestamp { get; set; } = "";
   public string Result { get; set; } = "";
 }

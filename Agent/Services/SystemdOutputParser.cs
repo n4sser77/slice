@@ -24,7 +24,7 @@ internal static class SystemdOutputParser
             MainPid              = int.TryParse(dict.GetValueOrDefault("MainPID"), out var pid) ? pid : 0,
             MemoryCurrent        = ParseUlong(dict.GetValueOrDefault("MemoryCurrent")),
             MemoryPeak           = ParseUlong(dict.GetValueOrDefault("MemoryPeak")),
-            CpuUsageInSec        = ParseUlong(dict.GetValueOrDefault("CPUUsageNSec")),
+            CpuUsageNSec         = ParseUlong(dict.GetValueOrDefault("CPUUsageNSec")),
             Result               = dict.GetValueOrDefault("Result") ?? "",
         };
     }

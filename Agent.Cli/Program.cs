@@ -14,5 +14,6 @@ var httpClient = services.GetRequiredService<HttpClient>();
 var root = new RootCommand("slice — deploy and manage .NET services");
 DeployServiceCommand.Register(root, httpClient);
 GetServicesCommand.Register(root, httpClient);
+GetServiceStatusCommand.Register(root, httpClient);
 
 return await root.Parse(args).InvokeAsync();

@@ -74,4 +74,20 @@ app.MapGet("v1/services", async (ProcessManager processRunner) =>
   }
 });
 
+app.MapGet("v1/services/{serviceName}", async (string serviceName, ProcessManager processRunner) =>
+{
+  try
+  {
+    var service = await processRunner.GetServiceStatusAsync(serviceName);
+    if (service == null)
+      return Results.NotFound();
+
+    return Results.Ok(service);
+  }
+  catch (SystemctlException ex)
+  {
+    return Results.Problem(detail: ex.Message, statusCode: (int)HttpStatusCode.InternalServerError);
+  }
+});
+
 app.Run();
