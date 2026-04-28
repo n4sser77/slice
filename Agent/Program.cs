@@ -90,4 +90,13 @@ app.MapGet("v1/services/{serviceName}", async (string serviceName, ProcessManage
   }
 });
 
+app.MapPost("v1/services/{serviceName}/stop", async (string serviceName, ProcessManager processManager) =>
+{
+  var stopped = await processManager.StopServiceAsync(serviceName);
+  return stopped
+      ? Results.NoContent()
+      : Results.Problem(detail: $"Failed to stop service '{serviceName}'. Make sure the service exists and is running.",
+                        statusCode: (int)HttpStatusCode.InternalServerError);
+});
+
 app.Run();
