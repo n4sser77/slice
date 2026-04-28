@@ -33,7 +33,7 @@ public class SystemdOutputParserTests
         Assert.Equal(64202, result.MainPid);
         Assert.Equal(21827584UL, result.MemoryCurrent);
         Assert.Equal(23379968UL, result.MemoryPeak);
-        Assert.Equal(2569266000UL, result.CpuUsageInSec);
+        Assert.Equal(2569266000UL, result.CpuUsageNSec);
         Assert.Equal("success", result.Result);
     }
 

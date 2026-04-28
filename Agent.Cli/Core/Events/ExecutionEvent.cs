@@ -1,6 +1,7 @@
 using Agent.Cli.Core.Results;
 using Slice.Common.Models;
 
+
 namespace Agent.Cli.Core.Events;
 
 public abstract record ExecutionEvent;
@@ -16,6 +17,7 @@ public sealed record StatusMessage(string Message) : ExecutionEvent;
 public sealed record ProgressUpdate(double Percentage, string Message) : ExecutionEvent;
 
 public sealed record ServicesListed(IReadOnlyList<SystemdService> Services) : ExecutionEvent;
+public sealed record ServiceStatusReceived(ServiceStatus Service) : ExecutionEvent;
 
 public sealed record FinalResult(CommandResult Result) : ExecutionEvent;
 public sealed record DebugEvent(string Message) : ExecutionEvent;
