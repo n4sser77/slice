@@ -158,4 +158,22 @@ public partial class ProcessManager
     var status = SystemdOutputParser.ParseServiceStatus(output);
     return status.LoadState == "not-found" ? null : status;
   }
+
+  public async Task<bool> StopServiceAsync(string serviceName)
+  {
+    var psi = new ProcessStartInfo
+    {
+      FileName = _systemctlBinary,
+      ArgumentList = { "--user", "stop", $"{serviceName}.service" },
+      RedirectStandardOutput = true,
+      UseShellExecute = false,
+      CreateNoWindow = true
+    };
+
+    using var process = Process.Start(psi)!;
+    string output = await process.StandardOutput.ReadToEndAsync();
+    await process.WaitForExitAsync();
+
+    return process.ExitCode == 0;
+  }
 }
