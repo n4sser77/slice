@@ -57,13 +57,24 @@ The manual `slice deploy` stays as an alternative. Useful for one-off deploys an
 
 Security is a hard requirement before any of this goes near production or gets exposed to the internet. Things to figure out and implement:
 
+### Must be in place before Phase 2 ships
+
+These are blockers. The web client expands the attack surface — anyone with a browser could hit the agent. None of Phase 2 goes public without these done.
+
 - **Authentication** — the agent needs to verify that requests come from a trusted source. Simple shared token or API key stored in the agent, passed by the client on every request. The CLI reads it from an env var or config file. Nothing hits the agent without it.
-- **Token storage** — tokens on the server side stored securely, not in plaintext config if avoidable. Clients store theirs in env vars (easy to inject in CI, easy to keep out of version control).
 - **HTTPS** — the agent should run behind a reverse proxy with TLS before being exposed publicly. Tokens over plain HTTP are not tokens, they're usernames.
-- **Request validation for webhooks** — GitHub sends a signature with every webhook payload. Verify it before doing anything. Standard HMAC-SHA256 pattern.
-- **Rate limiting** — the deploy endpoint shouldn't be hammerable. Basic rate limiting on the agent.
+- **Input validation on service names** — every endpoint that accepts a `serviceName` must reject anything that doesn't match the `slice-*` pattern. Right now the stop and status endpoints pass the name straight to `systemctl`, which means a caller can operate on any user unit on the machine, not just deployed apps. A 400 with a clear message is enough.
+
+### Important but not Phase 2 blockers
+
+- **Token storage** — tokens on the server side stored securely, not in plaintext config if avoidable. Clients store theirs in env vars (easy to inject in CI, easy to keep out of version control).
+- **Rate limiting** — the deploy endpoint accepts large file uploads and shouldn't be hammerable. ASP.NET has built-in rate limiting middleware. A sliding window on the upload endpoint is enough to start.
 - **Least privilege** — the agent runs as a user-level systemd service, not root. Keep it that way. Review what permissions it actually needs and cut anything extra.
 - **Audit log** — know what was deployed, by whom (which token), and when. Even a simple append-only log file is better than nothing.
+
+### Phase 3 only
+
+- **Request validation for webhooks** — GitHub sends a signature with every webhook payload. Verify it before doing anything. Standard HMAC-SHA256 pattern.
 
 Still need to think through what key/token model fits best for the two different clients (CLI and GitHub Actions). Will revisit this before Phase 3.
 
