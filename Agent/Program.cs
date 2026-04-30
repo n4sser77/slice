@@ -55,6 +55,7 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
   try
   {
     string appSafePath = namingService.GetSafeAppName(file.FileName);
+    string displayName = namingService.GetRawAppName(file.FileName);
     string dllName = Path.GetFileNameWithoutExtension(file.FileName);
     var uploadPath = namingService.GetUploadPath(appSafePath);
     Directory.CreateDirectory(uploadPath);
@@ -76,12 +77,12 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
         return Results.Problem(detail: "ReverseProxy:BaseDomain is not configured. Provide --domain explicitly.",
                                statusCode: (int)HttpStatusCode.BadRequest);
 
-      var targetDomain = domain ?? $"{appSafePath}.{opts.BaseDomain}";
+      var targetDomain = domain ?? $"{displayName}.{opts.BaseDomain}";
       await proxy.RegisterRouteAsync(appSafePath, targetDomain, port);
       publicUrl = $"https://{targetDomain}";
     }
 
-    return Results.Ok(new DeployResult(appSafePath, publicUrl));
+    return Results.Ok(new DeployResult(displayName, publicUrl));
   }
   catch (ArgumentException ex)
   {

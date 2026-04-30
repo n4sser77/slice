@@ -10,7 +10,9 @@ public partial class FileNamingService
     [GeneratedRegex(@"[^a-zA-Z0-9-]")]
     private static partial Regex SafeCharsRegex();
 
-    public string GetSafeAppName(string filename)
+    public string GetSafeAppName(string filename) => $"{FilePrefix}-{GetRawAppName(filename)}";
+
+    public string GetRawAppName(string filename)
     {
         var extension = Path.GetExtension(filename).ToLowerInvariant();
         if (extension != AllowedExtension)
@@ -22,7 +24,7 @@ public partial class FileNamingService
         if (string.IsNullOrEmpty(cleanName))
             throw new ArgumentException("Filename cannot be empty after sanitization.");
 
-        return $"{FilePrefix}-{cleanName}";
+        return cleanName;
     }
 
     public string GetUploadPath(string appName)
