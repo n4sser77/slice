@@ -32,7 +32,8 @@ public partial class ProcessManager
     };
 
     using var process = Process.Start(psi);
-    if (process == null)
+
+    if (process is null)
       throw new SystemctlException("Failed to start systemctl for service discovery.");
 
     string output = await process.StandardOutput.ReadToEndAsync();
@@ -55,19 +56,19 @@ public partial class ProcessManager
     ];
   }
 
-  private Task RunService(string appName)
+  private async Task RunService(string appName)
   {
-    RunSystemctlUser("daemon-reload");
+    await RunSystemctlUser("daemon-reload");
 
     bool isActive = IsServiceActive(appName);
-    RunSystemctlUser(isActive ? $"restart {appName}.service" : $"enable --now {appName}.service");
-
-    return Task.CompletedTask;
+    await RunSystemctlUser(isActive ? $"restart {appName}.service" : $"enable --now {appName}.service");
+    return;
   }
 
   private bool IsServiceActive(string appName)
   {
-    using var process = Process.Start(new ProcessStartInfo
+    using var process =
+    Process.Start(new ProcessStartInfo
     {
       FileName = _systemctlBinary,
       Arguments = $"--user is-active {appName}.service",
@@ -78,13 +79,14 @@ public partial class ProcessManager
     return process?.ExitCode == 0;
   }
 
-  private void RunSystemctlUser(string args) => Process.Start(new ProcessStartInfo
-  {
-    FileName = _systemctlBinary,
-    Arguments = $"--user {args}",
-    UseShellExecute = false,
-    CreateNoWindow = true,
-  })?.WaitForExit();
+  private async Task RunSystemctlUser(string args) =>
+   Process.Start(new ProcessStartInfo
+   {
+     FileName = _systemctlBinary,
+     Arguments = $"--user {args}",
+     UseShellExecute = false,
+     CreateNoWindow = true,
+   })?.WaitForExitAsync();
 
   public async Task<int> CreateSystemdService(string appName, string dllName)
   {
@@ -105,14 +107,14 @@ public partial class ProcessManager
     return port;
   }
 
-  private (string, string) ConstructCustomDomainUrl(string appName, int port)
+  private static (string, string) ConstructCustomDomainUrl(string appName, int port)
   {
-    var domain = appName.ToString() + ".localhost";
+    var domain = appName + ".localhost";
     var url = $"http://{domain}:{port}";
     return (domain, url);
   }
 
-  private string ConstructServicefile(string appName, string dllName, string appDir, int port)
+  private static string ConstructServicefile(string appName, string dllName, string appDir, int port)
   {
     var (domain, url) = ConstructCustomDomainUrl(appName, port);
     var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT")
