@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Slice.Common.Models;
 using Microsoft.AspNetCore.Mvc;
+using Agent.Services;
 
 namespace Agent.Serialization;
 
@@ -10,6 +11,8 @@ namespace Agent.Serialization;
 [JsonSerializable(typeof(SystemdService))]
 [JsonSerializable(typeof(List<SystemdService>))]
 [JsonSerializable(typeof(ServiceStatus))]
+[JsonSerializable(typeof(DeployResult))]
+[JsonSerializable(typeof(CaddyRoute))]
 [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
 public partial class AppJsonContext : JsonSerializerContext { }
 

@@ -1,8 +1,12 @@
 using System.Net;
+using Agent.Configuration;
 using Agent.Serialization;
 using Agent.Services;
 using Agent.Services.Exceptions;
+using Agent.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Slice.Common.Models;
 
 
 var builder = WebApplication.CreateSlimBuilder(args);
@@ -11,15 +15,24 @@ var builder = WebApplication.CreateSlimBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
-  // This makes the API use your source-generated context globally
   options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonContext.Default);
 });
+
 var systemdPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config/systemd/user/");
 
 builder.Services.AddTransient<IFileNamingService, FileNamingService>();
 builder.Services.AddSingleton<IPortManager, PortManager>();
 builder.Services.AddTransient(sp =>
         new ProcessManager(systemdPath, sp.GetRequiredService<IPortManager>()));
+
+builder.Services.Configure<ReverseProxyOptions>(
+    builder.Configuration.GetSection(ReverseProxyOptions.SectionName));
+
+builder.Services.AddHttpClient<IReverseProxyClient, CaddyClient>((sp, client) =>
+{
+  var opts = sp.GetRequiredService<IOptions<ReverseProxyOptions>>().Value;
+  client.BaseAddress = new Uri(opts.AdminUrl);
+});
 
 var app = builder.Build();
 
@@ -30,7 +43,14 @@ if (app.Environment.IsDevelopment())
 
 
 
-app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (IFormFile file, ProcessManager processRunner, IFileNamingService namingService) =>
+app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
+    IFormFile file,
+    [FromForm] bool publish,
+    [FromForm] string? domain,
+    ProcessManager processRunner,
+    IFileNamingService namingService,
+    IReverseProxyClient proxy,
+    IOptions<ReverseProxyOptions> proxyOptions) =>
 {
   try
   {
@@ -46,9 +66,22 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (IFormFile file
       return Results.Problem(detail: $"No runnable DLL '{dllName}.dll' found in uploaded archive.",
                              statusCode: (int)HttpStatusCode.BadRequest);
 
-    await processRunner.CreateSystemdService(appSafePath, dllName);
+    var port = await processRunner.CreateSystemdService(appSafePath, dllName);
 
-    return Results.Accepted($"{appSafePath} Accepted");
+    string? publicUrl = null;
+    if (publish)
+    {
+      var opts = proxyOptions.Value;
+      if (string.IsNullOrEmpty(opts.BaseDomain) && domain is null)
+        return Results.Problem(detail: "ReverseProxy:BaseDomain is not configured. Provide --domain explicitly.",
+                               statusCode: (int)HttpStatusCode.BadRequest);
+
+      var targetDomain = domain ?? $"{appSafePath}.{opts.BaseDomain}";
+      await proxy.RegisterRouteAsync(appSafePath, targetDomain, port);
+      publicUrl = $"https://{targetDomain}";
+    }
+
+    return Results.Ok(new DeployResult(appSafePath, publicUrl));
   }
   catch (ArgumentException ex)
   {
