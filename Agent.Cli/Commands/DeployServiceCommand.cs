@@ -2,24 +2,34 @@ using System.CommandLine;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Agent.Cli.Core;
 using Agent.Cli.Core.Events;
 using Agent.Cli.Core.Results;
 using Agent.Cli.Presentation;
+using Agent.Cli.Serialization;
 using Agent.Cli.Utils;
+using Slice.Common.Models;
 
 namespace Agent.Cli.Commands;
 
-public class DeployServiceCommand(string targetName, HttpClient httpClient) : ICommand
+public class DeployServiceCommand(string targetName, bool publish, string? domain, HttpClient httpClient) : ICommand
 {
   public static void Register(RootCommand root, HttpClient httpClient)
   {
     var targetArg = new Argument<string>("target") { Description = "The .NET project name or .csproj path to deploy" };
-    var command = new Command("deploy", "Deploy a .NET service") { targetArg };
+    var publishOpt = new Option<bool>("--publish") { Description = "Expose the app publicly via the reverse proxy" };
+    var domainOpt = new Option<string?>("--domain") { Description = "Custom domain. Defaults to <appname>.<base-domain>" };
+
+    var command = new Command("deploy", "Deploy a .NET service") { targetArg, publishOpt, domainOpt };
 
     command.SetAction(async (parseResult, ct) =>
     {
-      var cmd = new DeployServiceCommand(parseResult.GetValue(targetArg)!, httpClient);
+      var cmd = new DeployServiceCommand(
+          parseResult.GetValue(targetArg)!,
+          parseResult.GetValue(publishOpt),
+          parseResult.GetValue(domainOpt),
+          httpClient);
       return await ConsoleRenderer.RenderAsync(cmd.ExecuteStreamingAsync(ct), ct);
     });
 
@@ -69,7 +79,13 @@ public class DeployServiceCommand(string targetName, HttpClient httpClient) : IC
       yield break;
     }
     yield return new StepCompleted("Uploading to deployment service", TimeSpan.Zero);
-    yield return new FinalResult(new SuccessResult($"Deployment complete: {uploadResult.response}"));
+
+    var result = uploadResult.result!;
+    var message = result.PublicUrl is { } url
+        ? $"Deployed {result.AppName} → {url}"
+        : $"Deployed {result.AppName} (localhost only)";
+
+    yield return new FinalResult(new SuccessResult(message));
   }
 
   private (string? filePath, ErrorResult? error) TryFindProject(CancellationToken ct)
@@ -171,23 +187,28 @@ public class DeployServiceCommand(string targetName, HttpClient httpClient) : IC
     }
   }
 
-  private async Task<(string? response, ErrorResult? error)> TryUploadAsync(MemoryStream zipStream, string fileName, CancellationToken ct)
+  private async Task<(DeployResult? result, ErrorResult? error)> TryUploadAsync(MemoryStream zipStream, string fileName, CancellationToken ct)
   {
     try
     {
       using var content = new ProgressStreamContent(zipStream);
       using var multipart = new MultipartFormDataContent();
       multipart.Add(content, "file", fileName);
+      multipart.Add(new StringContent(publish ? "true" : "false"), "publish");
+      if (domain is not null)
+        multipart.Add(new StringContent(domain), "domain");
+
       var uploadResult = await httpClient.PostAsync("services", multipart, ct);
 
       if (!uploadResult.IsSuccessStatusCode)
       {
-        var error = await uploadResult.Content.ReadAsStringAsync();
+        var error = await uploadResult.Content.ReadAsStringAsync(ct);
         return (null, new ErrorResult($"Error: {uploadResult.StatusCode}. {error}"));
       }
 
-      var response = await uploadResult.Content.ReadAsStringAsync();
-      return (response, null);
+      var body = await uploadResult.Content.ReadAsStringAsync(ct);
+      var result = JsonSerializer.Deserialize(body, CliJsonContext.Default.DeployResult);
+      return (result, null);
     }
     catch (HttpRequestException ex)
     {
