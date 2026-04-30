@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace Agent.Services;
 
-public partial class FileNamingService : IFileNamingService
+public partial class FileNamingService
 {
     private const string AllowedExtension = ".zip";
     private const string FilePrefix = "slice";
