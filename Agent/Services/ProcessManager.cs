@@ -86,7 +86,7 @@ public partial class ProcessManager
     CreateNoWindow = true,
   })?.WaitForExit();
 
-  public async Task CreateSystemdService(string appName, string dllName)
+  public async Task<int> CreateSystemdService(string appName, string dllName)
   {
     string appDir = Path.GetFullPath(Path.Combine("slice", appName));
     int? nullablePort = _portManager.ReserveNextPort();
@@ -102,6 +102,7 @@ public partial class ProcessManager
     File.WriteAllText(servicePath, serviceContent);
 
     await RunService(appName);
+    return port;
   }
 
   private (string, string) ConstructCustomDomainUrl(string appName, int port)

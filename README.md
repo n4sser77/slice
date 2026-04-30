@@ -28,15 +28,24 @@ dotnet pack Agent.Cli --configuration Release
 dotnet tool install --global --add-source ./Agent.Cli/bin/Release slice
 ```
 
+Point the CLI at your server:
+
+```bash
+export SLICE_AGENT_URL=http://<your-server-ip>:5165
+```
+
 Once installed, the `slice` command is available everywhere on your machine:
 
 ```bash
-slice deploy MyApp
+slice deploy MyApp                                         # localhost only
+slice deploy MyApp --publish                               # public HTTPS URL
+slice deploy MyApp --publish --domain myapp.example.com   # custom domain
 slice list
 slice status MyApp
+slice stop MyApp
 ```
 
-The CLI packages your app, sends it to the agent running on your server, and the agent handles the rest — systemd service, port, everything.
+The CLI packages your app, sends it to the agent running on your server, and the agent handles the rest — systemd service, port, and optionally a public HTTPS URL via Caddy.
 
 **The agent needs to be running on your server first.** See [Docs/server-setup.md](Docs/server-setup.md) for how to get it running.
 
