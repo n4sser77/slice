@@ -20,7 +20,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 var systemdPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config/systemd/user/");
 
-builder.Services.AddTransient<IFileNamingService, FileNamingService>();
+builder.Services.AddTransient<FileNamingService>();
 builder.Services.AddSingleton<IPortManager, PortManager>();
 builder.Services.AddTransient(sp =>
         new ProcessManager(systemdPath, sp.GetRequiredService<IPortManager>()));
@@ -48,7 +48,7 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
     [FromForm] bool publish,
     [FromForm] string? domain,
     ProcessManager processRunner,
-    IFileNamingService namingService,
+    FileNamingService namingService,
     IReverseProxyClient proxy,
     IOptions<ReverseProxyOptions> proxyOptions) =>
 {
