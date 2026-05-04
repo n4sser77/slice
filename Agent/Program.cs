@@ -64,8 +64,10 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
 
     var dllPath = Path.Combine(Path.GetFullPath(uploadPath), dllName + ".dll");
     if (!File.Exists(dllPath))
+    {
       return Results.Problem(detail: $"No runnable DLL '{dllName}.dll' found in uploaded archive.",
                              statusCode: (int)HttpStatusCode.BadRequest);
+    }
 
     var port = await processRunner.CreateSystemdService(appSafePath, dllName);
 
@@ -74,10 +76,18 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
     {
       var opts = proxyOptions.Value;
       if (string.IsNullOrEmpty(opts.BaseDomain) && domain is null)
+      {
         return Results.Problem(detail: "ReverseProxy:BaseDomain is not configured. Provide --domain explicitly.",
                                statusCode: (int)HttpStatusCode.BadRequest);
+      }
+      if (!namingService.IsDomainValid(domain))
+      {
+        return Results.Problem(detail: $"Provided domain '{domain}' is not valid.",
+                               statusCode: (int)HttpStatusCode.BadRequest);
+      }
 
       var targetDomain = domain ?? $"{displayName}.{opts.BaseDomain}";
+
       if (targetDomain.EndsWith(opts.BaseDomain) && string.IsNullOrEmpty(opts.BaseDomain))
       {
         var (defaultCustomDomain, _) = ConstructCustomDomainUrl(displayName, port);
