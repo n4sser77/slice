@@ -78,6 +78,11 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
                                statusCode: (int)HttpStatusCode.BadRequest);
 
       var targetDomain = domain ?? $"{displayName}.{opts.BaseDomain}";
+      if (targetDomain.EndsWith(opts.BaseDomain) && string.IsNullOrEmpty(opts.BaseDomain))
+      {
+        var (defaultCustomDomain, _) = ConstructCustomDomainUrl(displayName, port);
+        targetDomain = defaultCustomDomain;
+      }
       await proxy.RegisterRouteAsync(appSafePath, targetDomain, port);
       publicUrl = $"https://{targetDomain}";
     }
@@ -134,3 +139,11 @@ app.MapPost("v1/services/{serviceName}/stop", async (string serviceName, Process
 });
 
 app.Run();
+
+
+static (string, string) ConstructCustomDomainUrl(string appName, int port)
+{
+  var domain = appName + ".localhost";
+  var url = $"http://{domain}:{port}";
+  return (domain, url);
+}
