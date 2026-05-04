@@ -69,7 +69,6 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
                              statusCode: (int)HttpStatusCode.BadRequest);
     }
 
-    var port = await processRunner.CreateSystemdService(appSafePath, dllName);
 
     string? publicUrl = null;
     if (publish)
@@ -86,6 +85,7 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
                                statusCode: (int)HttpStatusCode.BadRequest);
       }
 
+      var port = await processRunner.CreateSystemdService(appSafePath, dllName);
       var targetDomain = domain ?? $"{displayName}.{opts.BaseDomain}";
 
       if (targetDomain.EndsWith(opts.BaseDomain) && string.IsNullOrEmpty(opts.BaseDomain))
