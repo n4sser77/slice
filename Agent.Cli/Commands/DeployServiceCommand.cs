@@ -80,7 +80,12 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
     }
     yield return new StepCompleted("Uploading to deployment service", TimeSpan.Zero);
 
-    var result = uploadResult.result!;
+    var result = uploadResult.result;
+    if (result is null)
+    {
+      yield return new StepFailed("Uploading to deployment service", "Unknown error, results are null");
+      yield break;
+    }
     var message = result.PublicUrl is { } url
         ? $"Deployed {result.AppName} → {url}"
         : $"Deployed {result.AppName} (localhost only)";
