@@ -81,14 +81,18 @@ public partial class ProcessManager
 
   private async Task RunSystemctlUser(string args)
   {
-    var process = Process.Start(new ProcessStartInfo
+    using var process = Process.Start(new ProcessStartInfo
     {
       FileName = _systemctlBinary,
       Arguments = $"--user {args}",
       UseShellExecute = false,
       CreateNoWindow = true,
+      RedirectStandardError = true,
     }) ?? throw new InvalidOperationException($"Failed to start systemctl with args: {args}");
+    string error = await process.StandardError.ReadToEndAsync();
     await process.WaitForExitAsync();
+    if (process.ExitCode != 0)
+      throw new SystemctlException($"systemctl --user {args} failed: {error.Trim()}");
   }
 
   public async Task<int> CreateSystemdService(string appName, string dllName, string? allowedHost = null)

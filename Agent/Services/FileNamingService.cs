@@ -29,6 +29,8 @@ public partial class FileNamingService
 
   public bool IsDomainValid(string? domain)
   {
+    if (string.IsNullOrWhiteSpace(domain))
+      return false;
     return Uri.CheckHostName(domain) == UriHostNameType.Dns;
   }
 

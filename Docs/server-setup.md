@@ -40,7 +40,7 @@ Two options depending on your preference:
 No .NET runtime needed to run the agent. Self-contained binary.
 
 ```bash
-dotnet publish Agent -c Release
+dotnet publish Agent -c Release -r linux-arm64
 ```
 
 Output: `Agent/bin/Release/net10.0/linux-arm64/publish/Agent`
