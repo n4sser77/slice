@@ -182,7 +182,7 @@ The agent reads reverse proxy settings from `appsettings.json` in the publish di
 ```json
 "ReverseProxy": {
   "AdminUrl": "http://localhost:2019",
-  "BaseDomain": "naslice.duckdns.org"
+  "BaseDomain": "your-domain.example.com"
 }
 ```
 

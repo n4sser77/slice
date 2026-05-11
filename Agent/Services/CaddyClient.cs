@@ -22,7 +22,7 @@ public class CaddyClient(HttpClient http) : IReverseProxyClient
 
   public async Task RemoveRouteAsync(string appName, CancellationToken ct = default)
   {
-    var response = await http.DeleteAsync($"/id/slice-{appName}", ct);
+    var response = await http.DeleteAsync($"/id/{appName}", ct);
     response.EnsureSuccessStatusCode();
   }
 }

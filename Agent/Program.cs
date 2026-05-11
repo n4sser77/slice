@@ -69,8 +69,7 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
                              statusCode: (int)HttpStatusCode.BadRequest);
     }
 
-
-    string? publicUrl = null;
+    string? targetDomain = null;
     if (publish)
     {
       var opts = proxyOptions.Value;
@@ -79,20 +78,19 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
         return Results.Problem(detail: "ReverseProxy:BaseDomain is not configured. Provide --domain explicitly.",
                                statusCode: (int)HttpStatusCode.BadRequest);
       }
-      if (!namingService.IsDomainValid(domain))
+      if (domain is not null && !namingService.IsDomainValid(domain))
       {
         return Results.Problem(detail: $"Provided domain '{domain}' is not valid.",
                                statusCode: (int)HttpStatusCode.BadRequest);
       }
+      targetDomain = domain ?? $"{displayName}.{opts.BaseDomain}";
+    }
 
-      var port = await processRunner.CreateSystemdService(appSafePath, dllName);
-      var targetDomain = domain ?? $"{displayName}.{opts.BaseDomain}";
+    var port = await processRunner.CreateSystemdService(appSafePath, dllName, targetDomain);
 
-      if (targetDomain.EndsWith(opts.BaseDomain) && string.IsNullOrEmpty(opts.BaseDomain))
-      {
-        var (defaultCustomDomain, _) = ConstructCustomDomainUrl(displayName, port);
-        targetDomain = defaultCustomDomain;
-      }
+    string? publicUrl = null;
+    if (targetDomain is not null)
+    {
       await proxy.RegisterRouteAsync(appSafePath, targetDomain, port);
       publicUrl = $"https://{targetDomain}";
     }
