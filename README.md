@@ -41,8 +41,8 @@ slice deploy MyApp                                         # localhost only
 slice deploy MyApp --publish                               # public HTTPS URL
 slice deploy MyApp --publish --domain myapp.example.com   # custom domain
 slice list
-slice status MyApp
-slice stop MyApp
+slice status myapp
+slice stop myapp
 ```
 
 The CLI packages your app, sends it to the agent running on your server, and the agent handles the rest — systemd service, port, and optionally a public HTTPS URL via Caddy.

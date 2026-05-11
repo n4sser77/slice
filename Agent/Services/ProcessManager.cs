@@ -79,16 +79,19 @@ public partial class ProcessManager
     return process?.ExitCode == 0;
   }
 
-  private async Task RunSystemctlUser(string args) =>
-   Process.Start(new ProcessStartInfo
-   {
-     FileName = _systemctlBinary,
-     Arguments = $"--user {args}",
-     UseShellExecute = false,
-     CreateNoWindow = true,
-   })?.WaitForExitAsync();
+  private async Task RunSystemctlUser(string args)
+  {
+    var process = Process.Start(new ProcessStartInfo
+    {
+      FileName = _systemctlBinary,
+      Arguments = $"--user {args}",
+      UseShellExecute = false,
+      CreateNoWindow = true,
+    }) ?? throw new InvalidOperationException($"Failed to start systemctl with args: {args}");
+    await process.WaitForExitAsync();
+  }
 
-  public async Task<int> CreateSystemdService(string appName, string dllName)
+  public async Task<int> CreateSystemdService(string appName, string dllName, string? allowedHost = null)
   {
     string appDir = Path.GetFullPath(Path.Combine("slice", appName));
     int? nullablePort = _portManager.ReserveNextPort();
@@ -97,7 +100,7 @@ public partial class ProcessManager
         throw new OutOfPortsException() :
         (int)nullablePort;
 
-    string serviceContent = ConstructServicefile(appName, dllName, appDir, port);
+    string serviceContent = ConstructServicefile(appName, dllName, appDir, port, allowedHost);
 
     var servicePath = Path.Combine(_targetDir, $"{appName}.service");
     Directory.CreateDirectory(_targetDir);
@@ -114,9 +117,10 @@ public partial class ProcessManager
     return (domain, url);
   }
 
-  private static string ConstructServicefile(string appName, string dllName, string appDir, int port)
+  private static string ConstructServicefile(string appName, string dllName, string appDir, int port, string? allowedHost = null)
   {
     var (domain, url) = ConstructCustomDomainUrl(appName, port);
+    var hostFilter = allowedHost ?? domain;
     var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT")
         ?? throw new InvalidOperationException("DOTNET_ROOT is not set. Ensure dotnet is installed and DOTNET_ROOT is configured.");
     var dotnetExe = Path.Combine(dotnetRoot, "dotnet");
@@ -135,7 +139,7 @@ public partial class ProcessManager
         Environment=ASPNETCORE_HTTP_PORTS={port}
         Environment=ASPNETCORE_URLS={url}
         Environment=ASPNETCORE_ENVIRONMENT=Production
-        Environment=ASPNETCORE_HOSTFILTERING__ALLOWEDHOSTS={domain}
+        Environment=ASPNETCORE_HOSTFILTERING__ALLOWEDHOSTS={hostFilter}
         Environment=DOTNET_ROOT={dotnetRoot}
 
         [Install]
