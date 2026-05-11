@@ -36,9 +36,11 @@ public partial class ProcessManager
     if (process is null)
       throw new SystemctlException("Failed to start systemctl for service discovery.");
 
-    string output = await process.StandardOutput.ReadToEndAsync();
-    string error = await process.StandardError.ReadToEndAsync();
+    Task<string> readOutput = process.StandardOutput.ReadToEndAsync();
+    Task<string> readError = process.StandardError.ReadToEndAsync();
     await process.WaitForExitAsync();
+    string output = await readOutput;
+    string error = await readError;
 
     if (process.ExitCode != 0)
       throw new SystemctlException($"systemctl failed while listing services: {error.Trim()}");
@@ -59,24 +61,22 @@ public partial class ProcessManager
   private async Task RunService(string appName)
   {
     await RunSystemctlUser("daemon-reload");
-
-    bool isActive = IsServiceActive(appName);
+    bool isActive = await IsServiceActiveAsync(appName);
     await RunSystemctlUser(isActive ? $"restart {appName}.service" : $"enable --now {appName}.service");
-    return;
   }
 
-  private bool IsServiceActive(string appName)
+  private async Task<bool> IsServiceActiveAsync(string appName)
   {
-    using var process =
-    Process.Start(new ProcessStartInfo
+    using var process = Process.Start(new ProcessStartInfo
     {
       FileName = _systemctlBinary,
       Arguments = $"--user is-active {appName}.service",
       UseShellExecute = false,
       CreateNoWindow = true,
     });
-    process?.WaitForExit();
-    return process?.ExitCode == 0;
+    if (process is null) return false;
+    await process.WaitForExitAsync();
+    return process.ExitCode == 0;
   }
 
   private async Task RunSystemctlUser(string args)
