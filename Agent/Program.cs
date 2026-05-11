@@ -119,11 +119,11 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
   }
   catch (HttpRequestException ex)
   {
-    if (appSafePath is not null)
-      await processRunner.StopServiceAsync(appSafePath);
-    return Results.Problem(
-        detail: $"Caddy route registration failed: {ex.Message}. Service was stopped.",
-        statusCode: (int)HttpStatusCode.BadGateway);
+    var rolled = await processRunner.StopServiceAsync(appSafePath!);
+    var detail = rolled
+        ? $"Caddy route registration failed: {ex.Message}. Service was rolled back."
+        : $"Caddy route registration failed: {ex.Message}. Service rollback also failed — stop it manually.";
+    return Results.Problem(detail: detail, statusCode: (int)HttpStatusCode.BadGateway);
   }
 }).DisableAntiforgery();
 
@@ -144,7 +144,7 @@ app.MapGet("v1/services/{serviceName}", async (string serviceName, ProcessManage
 {
   try
   {
-    var service = await processRunner.GetServiceStatusAsync($"slice-{serviceName}");
+    var service = await processRunner.GetServiceStatusAsync($"{FileNamingService.FilePrefix}-{serviceName}");
     if (service == null)
       return Results.NotFound();
 
@@ -158,7 +158,7 @@ app.MapGet("v1/services/{serviceName}", async (string serviceName, ProcessManage
 
 app.MapPost("v1/services/{serviceName}/stop", async (string serviceName, ProcessManager processManager) =>
 {
-  var stopped = await processManager.StopServiceAsync($"slice-{serviceName}");
+  var stopped = await processManager.StopServiceAsync($"{FileNamingService.FilePrefix}-{serviceName}");
   return stopped
       ? Results.NoContent()
       : Results.Problem(detail: $"Failed to stop service '{serviceName}'. Make sure the service exists and is running.",

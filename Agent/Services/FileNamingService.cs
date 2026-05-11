@@ -5,7 +5,7 @@ namespace Agent.Services;
 public partial class FileNamingService
 {
   private const string AllowedExtension = ".zip";
-  private const string FilePrefix = "slice";
+  internal const string FilePrefix = "slice";
 
   [GeneratedRegex(@"[^a-zA-Z0-9-]")]
   private static partial Regex SafeCharsRegex();

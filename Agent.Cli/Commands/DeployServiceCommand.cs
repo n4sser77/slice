@@ -47,7 +47,6 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
       yield break;
     }
 
-    // Step 1: Find project
     yield return new StepStarted("Finding project files");
     var findResult = TryFindProject(ct);
     if (findResult.error is ErrorResult findError)
@@ -57,7 +56,6 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
     }
     yield return new StepCompleted("Finding project files", TimeSpan.Zero);
 
-    // Step 2: Build
     yield return new StepStarted("Building project");
     var buildResult = await TryBuildProjectAsync(findResult.filePath!, ct);
     if (buildResult.error is ErrorResult buildError)
@@ -67,7 +65,6 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
     }
     yield return new StepCompleted("Building project", TimeSpan.Zero);
 
-    // Step 3: Create package
     yield return new StepStarted("Creating deployment package");
     var packageResult = TryCreatePackage(buildResult.publishPath!);
     if (packageResult.error is ErrorResult packageError)
@@ -77,7 +74,6 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
     }
     yield return new StepCompleted("Creating deployment package", TimeSpan.Zero);
 
-    // Step 4: Upload
     yield return new StepStarted("Uploading to deployment service");
     var uploadResult = await TryUploadAsync(packageResult.zipStream!, packageResult.fileName!, ct);
     if (uploadResult.error is ErrorResult uploadError)
