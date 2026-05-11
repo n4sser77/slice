@@ -40,6 +40,13 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
   public async IAsyncEnumerable<ExecutionEvent> ExecuteStreamingAsync(
       [EnumeratorCancellation] CancellationToken ct = default)
   {
+    if (domain is not null && !publish)
+    {
+      yield return new FinalResult(new ErrorResult(
+          "--domain requires --publish. Did you mean: slice deploy <target> --publish --domain <domain>?", 1));
+      yield break;
+    }
+
     // Step 1: Find project
     yield return new StepStarted("Finding project files");
     var findResult = TryFindProject(ct);

@@ -52,9 +52,10 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
     IReverseProxyClient proxy,
     IOptions<ReverseProxyOptions> proxyOptions) =>
 {
+  string? appSafePath = null;
   try
   {
-    string appSafePath = namingService.GetSafeAppName(file.FileName);
+    appSafePath = namingService.GetSafeAppName(file.FileName);
     string displayName = namingService.GetRawAppName(file.FileName);
     string dllName = Path.GetFileNameWithoutExtension(file.FileName);
     var uploadPath = namingService.GetUploadPath(appSafePath);
@@ -106,6 +107,24 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
   {
     return Results.Problem(detail: ex.Message, statusCode: (int)HttpStatusCode.BadRequest);
   }
+  catch (OutOfPortsException ex)
+  {
+    return Results.Problem(detail: ex.Message,
+                           statusCode: (int)HttpStatusCode.ServiceUnavailable);
+  }
+  catch (SystemctlException ex)
+  {
+    return Results.Problem(detail: ex.Message,
+                           statusCode: (int)HttpStatusCode.InternalServerError);
+  }
+  catch (HttpRequestException ex)
+  {
+    if (appSafePath is not null)
+      await processRunner.StopServiceAsync(appSafePath);
+    return Results.Problem(
+        detail: $"Caddy route registration failed: {ex.Message}. Service was stopped.",
+        statusCode: (int)HttpStatusCode.BadGateway);
+  }
 }).DisableAntiforgery();
 
 app.MapGet("v1/services", async (ProcessManager processRunner) =>
@@ -125,7 +144,7 @@ app.MapGet("v1/services/{serviceName}", async (string serviceName, ProcessManage
 {
   try
   {
-    var service = await processRunner.GetServiceStatusAsync(serviceName);
+    var service = await processRunner.GetServiceStatusAsync($"slice-{serviceName}");
     if (service == null)
       return Results.NotFound();
 
@@ -139,7 +158,7 @@ app.MapGet("v1/services/{serviceName}", async (string serviceName, ProcessManage
 
 app.MapPost("v1/services/{serviceName}/stop", async (string serviceName, ProcessManager processManager) =>
 {
-  var stopped = await processManager.StopServiceAsync(serviceName);
+  var stopped = await processManager.StopServiceAsync($"slice-{serviceName}");
   return stopped
       ? Results.NoContent()
       : Results.Problem(detail: $"Failed to stop service '{serviceName}'. Make sure the service exists and is running.",
@@ -147,11 +166,3 @@ app.MapPost("v1/services/{serviceName}/stop", async (string serviceName, Process
 });
 
 app.Run();
-
-
-static (string, string) ConstructCustomDomainUrl(string appName, int port)
-{
-  var domain = appName + ".localhost";
-  var url = $"http://{domain}:{port}";
-  return (domain, url);
-}
