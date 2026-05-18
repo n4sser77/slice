@@ -152,14 +152,13 @@ public partial class ProcessManager
   }
   public async Task<ServiceStatus?> GetServiceStatusAsync(string serviceName)
   {
-    var args = $"show {serviceName}.service --property=Id,Description,LoadState,ActiveState,SubState,StateChangeTimestamp,MainPID,MemoryCurrent,MemoryPeak,CPUUsageNSec,Result";
     var psi = new ProcessStartInfo
     {
       FileName = _systemctlBinary,
-      Arguments = $"--user {args}",
       RedirectStandardOutput = true,
       UseShellExecute = false,
-      CreateNoWindow = true
+      CreateNoWindow = true,
+      ArgumentList = { "--user", "show", $"{serviceName}.service", "--property=Id,Description,LoadState,ActiveState,SubState,StateChangeTimestamp,MainPID,MemoryCurrent,MemoryPeak,CPUUsageNSec,Result" }
     };
 
     using var process = Process.Start(psi)!;

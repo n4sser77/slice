@@ -142,9 +142,13 @@ app.MapGet("v1/services", async (ProcessManager processRunner) =>
 
 app.MapGet("v1/services/{serviceName}", async (string serviceName, ProcessManager processRunner) =>
 {
+  var fullName = $"{FileNamingService.FilePrefix}-{serviceName}";
+  if (!FileNamingService.IsValidServiceName(fullName))
+    return Results.Problem(detail: "Invalid service name.", statusCode: (int)HttpStatusCode.BadRequest);
+
   try
   {
-    var service = await processRunner.GetServiceStatusAsync($"{FileNamingService.FilePrefix}-{serviceName}");
+    var service = await processRunner.GetServiceStatusAsync(fullName);
     if (service == null)
       return Results.NotFound();
 
@@ -158,7 +162,11 @@ app.MapGet("v1/services/{serviceName}", async (string serviceName, ProcessManage
 
 app.MapPost("v1/services/{serviceName}/stop", async (string serviceName, ProcessManager processManager) =>
 {
-  var stopped = await processManager.StopServiceAsync($"{FileNamingService.FilePrefix}-{serviceName}");
+  var fullName = $"{FileNamingService.FilePrefix}-{serviceName}";
+  if (!FileNamingService.IsValidServiceName(fullName))
+    return Results.Problem(detail: "Invalid service name.", statusCode: (int)HttpStatusCode.BadRequest);
+
+  var stopped = await processManager.StopServiceAsync(fullName);
   return stopped
       ? Results.NoContent()
       : Results.Problem(detail: $"Failed to stop service '{serviceName}'. Make sure the service exists and is running.",

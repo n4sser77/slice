@@ -27,6 +27,12 @@ public partial class FileNamingService
     return cleanName;
   }
 
+  public static bool IsValidServiceName(string name)
+    => SliceManagedServiceNameRegex().IsMatch(name);
+
+  [GeneratedRegex(@"^slice-[a-z0-9-]+$")]
+  private static partial Regex SliceManagedServiceNameRegex();
+
   public bool IsDomainValid(string? domain)
   {
     if (string.IsNullOrWhiteSpace(domain))
