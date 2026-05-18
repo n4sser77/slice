@@ -113,6 +113,58 @@ This is an early idea. It might not get built at all, or it might look completel
 
 ---
 
+## Förenkling av användning — `slice init`
+
+Getting started with Slice today requires following [server-setup.md](server-setup.md) manually — installing .NET, configuring Caddy, setting up the agent as a systemd service, pointing the CLI at the right URL. That's a wall of steps that discourages adoption and is easy to get wrong.
+
+The goal is to automate all of it behind a single interactive command:
+
+```bash
+slice init          # interactive — guides through both client and server setup
+slice init client   # configure the CLI (agent URL, auth token)
+slice init server   # provision the server environment
+```
+
+### `slice init client`
+
+Sets up the local CLI configuration interactively:
+
+- Prompts for the agent URL (`SLICE_AGENT_URL`)
+- Prompts for the auth token (once authentication is implemented)
+- Writes config to `~/.config/slice/config.json`
+- Verifies connectivity by pinging the agent
+
+### `slice init server`
+
+Runs over SSH and sets up the minimum required to run the agent:
+
+- Installs the .NET runtime if not present
+- Downloads and installs the agent binary
+- Registers the agent as a user-level systemd service
+- Enables lingering (`loginctl enable-linger`) so user services survive logout
+- Prints the agent URL and confirms it is reachable
+
+Reverse proxy setup is offered as an optional step during init. The user chooses their preferred backend:
+
+```
+? Reverse proxy (optional):
+  ❯ None (localhost only, configure manually later)
+    Caddy (external, requires installation)
+    YARP (embedded in agent, no extra dependencies)
+```
+
+- **None** — agent runs without public routing. Useful for internal use or when the user prefers to configure routing manually later.
+- **Caddy** — init prompts for `BaseDomain` and `AdminUrl`, writes them to `appsettings.json`, and verifies that the Caddy Admin API is reachable. After init the agent is fully wired and `--publish` works immediately. Caddy itself must already be installed — init does not install it.
+- **YARP** — available once the embedded proxy is implemented. Init enables and configures it entirely within the agent. No external installation required.
+
+In all cases the goal is the same: when `slice init` finishes, the chosen setup is complete and `slice deploy` works without any additional manual steps. Nginx is out of scope for now — revisit in ~6 months if there is a clear need and available time.
+
+### Non-goals
+
+`slice init server` is not a general-purpose provisioning tool. It installs exactly what the agent needs and nothing else — no firewall rules, no DNS, no proxy installation.
+
+---
+
 ## Considered but not started
 
 - Git polling (background service that polls main and auto-deploys) — possible alternative to webhooks, simpler but less immediate
