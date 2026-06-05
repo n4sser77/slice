@@ -1,18 +1,18 @@
 using System.CommandLine;
+using System.Net;
+using System.Runtime.CompilerServices;
 using Agent.Cli.Core;
 using Agent.Cli.Core.Events;
-using Agent.Cli.Presentation;
 using Agent.Cli.Core.Results;
-using System.Runtime.CompilerServices;
-using System.Net;
+using Agent.Cli.Presentation;
 
 namespace Agent.Cli.Commands;
 
-public class StopServiceCommand(string serviceName, HttpClient httpClient) : ICommand
+public class RemoveServiceCommand(string serviceName, HttpClient httpClient) : ICommand
 {
   public static void Register(RootCommand root, HttpClient httpClient, CliConfig? config = null)
   {
-    Command command = new("stop", "Stops a running service.");
+    Command command = new("remove", "Remove a deployed service and free its resources.");
     Argument<string> serviceNameArg = new("service-name")
     {
       Description = "The name of the service without the 'slice-' prefix and '.service' suffix."
@@ -23,32 +23,35 @@ public class StopServiceCommand(string serviceName, HttpClient httpClient) : ICo
     {
       var raw = parseResult.GetValue(serviceNameArg)!;
       var name = raw.EndsWith(".service", StringComparison.OrdinalIgnoreCase) ? raw.Substring(0, raw.Length - ".service".Length) : raw;
-      var cmd = new StopServiceCommand(name, httpClient);
+      var cmd = new RemoveServiceCommand(name, httpClient);
       return await ConsoleRenderer.RenderAsync(cmd.ExecuteStreamingAsync(ct), ct);
     });
 
     root.Subcommands.Add(command);
-
   }
 
   public async IAsyncEnumerable<ExecutionEvent> ExecuteStreamingAsync(
-    [EnumeratorCancellation] CancellationToken ct = default)
+      [EnumeratorCancellation] CancellationToken ct = default)
   {
-    var (_, err) = await TryStopService(ct);
+    yield return new StepStarted("Removing service");
+
+    var (_, err) = await TryRemoveService(ct);
     if (err is ErrorResult errorResult)
     {
+      yield return new StepFailed("Removing service", errorResult.Message);
       yield return new FinalResult(errorResult);
       yield break;
     }
 
-    yield return new FinalResult(new SuccessResult($"Stopped {serviceName}"));
+    yield return new StepCompleted("Removing service", TimeSpan.Zero);
+    yield return new FinalResult(new SuccessResult($"Removed {serviceName}"));
   }
 
-  private async Task<(bool stopped, ErrorResult? err)> TryStopService(CancellationToken ct)
+  private async Task<(bool removed, ErrorResult? err)> TryRemoveService(CancellationToken ct)
   {
     try
     {
-      var response = await httpClient.PostAsync($"services/{serviceName}/stop", null, ct);
+      var response = await httpClient.DeleteAsync($"services/{serviceName}", ct);
 
       if (response.StatusCode == HttpStatusCode.NotFound)
         return (false, new ErrorResult($"Service '{serviceName}' not found.", 1));

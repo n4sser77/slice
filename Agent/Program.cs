@@ -173,4 +173,48 @@ app.MapPost("v1/services/{serviceName}/stop", async (string serviceName, Process
                         statusCode: (int)HttpStatusCode.InternalServerError);
 });
 
+app.MapDelete("v1/services/{serviceName}", async (
+    string serviceName,
+    ProcessManager processRunner,
+    IPortManager portManager,
+    IReverseProxyClient proxy) =>
+{
+  var fullName = $"{FileNamingService.FilePrefix}-{serviceName}";
+  if (!FileNamingService.IsValidServiceName(fullName))
+    return Results.Problem(detail: "Invalid service name.", statusCode: (int)HttpStatusCode.BadRequest);
+
+  var servicePath = Path.Combine(
+      Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+      ".config/systemd/user/", $"{fullName}.service");
+
+  if (!File.Exists(servicePath))
+    return Results.NotFound();
+
+  try
+  {
+    var port = processRunner.GetServicePortFromFile(fullName);
+
+    await processRunner.DeleteServiceAsync(fullName);
+
+    if (port is not null)
+      portManager.ReleasePort(port.Value);
+
+    try
+    {
+      await proxy.RemoveRouteAsync(fullName);
+    }
+    catch
+    {
+      // Caddy route may not exist — that's fine
+    }
+
+    return Results.NoContent();
+  }
+  catch (Exception ex)
+  {
+    return Results.Problem(detail: $"Failed to remove service '{serviceName}': {ex.Message}",
+                           statusCode: (int)HttpStatusCode.InternalServerError);
+  }
+});
+
 app.Run();
