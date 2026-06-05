@@ -58,8 +58,8 @@ public record CaddyMatch(
 
 public record CaddyHandle(
     [property: JsonPropertyName("handler")] string Handler,
-    [property: JsonPropertyName("routes")] CaddySubRoute[]? Routes = null,
-    [property: JsonPropertyName("upstreams")] CaddyUpstream[]? Upstreams = null
+    [property: JsonPropertyName("routes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CaddySubRoute[]? Routes = null,
+    [property: JsonPropertyName("upstreams"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CaddyUpstream[]? Upstreams = null
 );
 
 public record CaddySubRoute(
