@@ -29,14 +29,10 @@ public class GetServicesCommandTests
     var sut = new GetServicesCommand(client);
 
     var events = await ReadEvents(sut);
-    var listed = Assert.IsType<ServicesListed>(events[0]);
+    var listed = Assert.IsType<ServicesListed>(Assert.Single(events));
     Assert.Collection(listed.Services,
         s => Assert.Equal("slice-b.service", s.Unit),
         s => Assert.Equal("slice-a.service", s.Unit));
-
-    var final = Assert.IsType<FinalResult>(events[1]);
-    var success = Assert.IsType<SuccessResult>(final.Result);
-    Assert.Equal("Listed services.", success.Message);
   }
 
   [Fact]
