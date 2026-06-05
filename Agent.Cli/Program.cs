@@ -12,7 +12,7 @@ var services = new ServiceCollection()
 var httpClient = services.GetRequiredService<HttpClient>();
 
 var root = new RootCommand("slice — deploy and manage .NET services");
-DeployServiceCommand.Register(root, httpClient);
+DeployServiceCommand.Register(root, httpClient, config);
 GetServicesCommand.Register(root, httpClient);
 GetServiceStatusCommand.Register(root, httpClient);
 StopServiceCommand.Register(root, httpClient);

@@ -13,10 +13,15 @@ using Slice.Common.Models;
 
 namespace Agent.Cli.Commands;
 
-public class DeployServiceCommand(string targetName, bool publish, string? domain, HttpClient httpClient) : ICommand
+public class DeployServiceCommand(string targetName, bool publish, string? domain, HttpClient httpClient, CliConfig config) : ICommand
 {
-  public static void Register(RootCommand root, HttpClient httpClient)
+  private readonly CliConfig _config = config;
+  public static void Register(RootCommand root, HttpClient httpClient, CliConfig? config = null)
   {
+    if (config is null)
+    {
+      throw new ArgumentNullException(nameof(config), "CliConfig is required to register DeployServiceCommand");
+    }
     var targetArg = new Argument<string>("target") { Description = "The .NET project name or .csproj path to deploy" };
     var publishOpt = new Option<bool>("--publish") { Description = "Expose the app publicly via the reverse proxy" };
     var domainOpt = new Option<string?>("--domain") { Description = "Custom domain. Defaults to <appname>.<base-domain>" };
@@ -29,7 +34,9 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
           parseResult.GetValue(targetArg)!,
           parseResult.GetValue(publishOpt),
           parseResult.GetValue(domainOpt),
-          httpClient);
+          httpClient,
+          config
+          );
       return await ConsoleRenderer.RenderAsync(cmd.ExecuteStreamingAsync(ct), ct);
     });
 
@@ -135,7 +142,7 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
         RedirectStandardError = true,
         UseShellExecute = false,
         CreateNoWindow = true,
-        ArgumentList = { "publish", filePath, "-c", "Release", "-r", "linux-x64", "--self-contained", "false", "-p:PublishAot=false" }
+        ArgumentList = { "publish", filePath, "-c", "Release", "-r", _config.TargetHost, "--self-contained", "false", "-p:PublishAot=false" }
       };
 
       using var process = new Process { StartInfo = psi };
@@ -226,6 +233,10 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
     {
       return (null, new ErrorResult($"Connection timed out. Is the deployment service running at http://localhost:5165?, {ex.Message}", 1));
     }
+    catch (JsonException ex)
+    {
+      return (null, new ErrorResult($"Server returned invalid JSON: {ex.Message}", 1));
+    }
     catch (OperationCanceledException)
     {
       return (null, new ErrorResult("Cancelled", 1));
@@ -235,4 +246,5 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
       return (null, new ErrorResult(ex.Message, 1));
     }
   }
+
 }

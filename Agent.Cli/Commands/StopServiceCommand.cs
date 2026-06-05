@@ -10,10 +10,10 @@ namespace Agent.Cli.Commands;
 
 public class StopServiceCommand(string serviceName, HttpClient httpClient) : ICommand
 {
-  public static void Register(RootCommand root, HttpClient httpClient)
+  public static void Register(RootCommand root, HttpClient httpClient, CliConfig? config = null)
   {
     Command command = new("stop", "Stops a running service.");
-    Argument<string> serviceNameArg = new Argument<string>("service-name")
+    Argument<string> serviceNameArg = new("service-name")
     {
       Description = "The name of the service without the 'slice-' prefix and '.service' suffix."
     };

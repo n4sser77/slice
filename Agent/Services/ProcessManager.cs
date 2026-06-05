@@ -116,7 +116,7 @@ public partial class ProcessManager
 
   private static (string, string) ConstructCustomDomainUrl(string appName, int port)
   {
-    var domain = appName + ".localhost";
+    var domain = "127.0.0.1";
     var url = $"http://{domain}:{port}";
     return (domain, url);
   }

@@ -10,9 +10,27 @@ public class CaddyClient(HttpClient http) : IReverseProxyClient
   public async Task RegisterRouteAsync(string appName, string domain, int port, CancellationToken ct = default)
   {
     var route = new CaddyRoute(
-        appName,
-        [new CaddyMatch([domain])],
-        [new CaddyHandle("reverse_proxy", [new CaddyUpstream($"localhost:{port}")])]
+        Id: appName,
+        Match: [new CaddyMatch([domain])],
+        Handle:
+        [
+            new CaddyHandle(
+                Handler: "subroute",
+                Routes:
+                [
+                    new CaddySubRoute(
+                        Handle:
+                        [
+                            new CaddyHandle(
+                                Handler: "reverse_proxy",
+                                Upstreams: [new CaddyUpstream($"localhost:{port}")]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ],
+        Terminal: true
     );
 
     using var content = JsonContent.Create(route, AppJsonContext.Default.CaddyRoute);
@@ -30,7 +48,8 @@ public class CaddyClient(HttpClient http) : IReverseProxyClient
 public record CaddyRoute(
     [property: JsonPropertyName("@id")] string Id,
     [property: JsonPropertyName("match")] CaddyMatch[] Match,
-    [property: JsonPropertyName("handle")] CaddyHandle[] Handle
+    [property: JsonPropertyName("handle")] CaddyHandle[] Handle,
+    [property: JsonPropertyName("terminal")] bool Terminal
 );
 
 public record CaddyMatch(
@@ -39,7 +58,12 @@ public record CaddyMatch(
 
 public record CaddyHandle(
     [property: JsonPropertyName("handler")] string Handler,
-    [property: JsonPropertyName("upstreams")] CaddyUpstream[] Upstreams
+    [property: JsonPropertyName("routes")] CaddySubRoute[]? Routes = null,
+    [property: JsonPropertyName("upstreams")] CaddyUpstream[]? Upstreams = null
+);
+
+public record CaddySubRoute(
+    [property: JsonPropertyName("handle")] CaddyHandle[] Handle
 );
 
 public record CaddyUpstream(

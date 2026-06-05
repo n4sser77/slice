@@ -12,7 +12,7 @@ namespace Agent.Cli.Commands;
 
 public class GetServiceStatusCommand(string serviceName, HttpClient httpClient) : ICommand
 {
-  public static void Register(RootCommand root, HttpClient httpClient)
+  public static void Register(RootCommand root, HttpClient httpClient, CliConfig? config = null)
   {
     var command = new Command("status", "Inspect the status of a deployed service");
     var serviceNameArg = new Argument<string>("service-name")
