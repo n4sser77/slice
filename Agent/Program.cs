@@ -189,7 +189,7 @@ app.MapDelete("v1/services/{serviceName}", async (
 
   if (!File.Exists(servicePath))
   {
-    await processRunner.DaemonReloadAsync();
+    await processRunner.ResetUnitCacheAsync();
     return Results.NoContent();
   }
 

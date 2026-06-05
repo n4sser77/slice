@@ -53,7 +53,8 @@ public partial class ProcessManager
                 .Where(static s =>
                     !string.IsNullOrWhiteSpace(s.Unit) &&
                     s.Unit.StartsWith("slice-", StringComparison.Ordinal) &&
-                    s.Unit.EndsWith(".service", StringComparison.Ordinal))
+                    s.Unit.EndsWith(".service", StringComparison.Ordinal) &&
+                    !string.Equals(s.Loaded, "not-found", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(static s => s.Unit, StringComparer.Ordinal)
     ];
   }
@@ -79,8 +80,11 @@ public partial class ProcessManager
     return process.ExitCode == 0;
   }
 
-  public async Task DaemonReloadAsync()
-    => await RunSystemctlUser("daemon-reload");
+  public async Task ResetUnitCacheAsync()
+  {
+    await RunSystemctlUser("daemon-reload");
+    await RunSystemctlUser("reset-failed");
+  }
 
   private async Task RunSystemctlUser(string args)
   {
@@ -201,7 +205,7 @@ public partial class ProcessManager
     if (File.Exists(servicePath))
       File.Delete(servicePath);
 
-    await RunSystemctlUser("daemon-reload");
+    await ResetUnitCacheAsync();
 
     var appDir = Path.GetFullPath(Path.Combine("slice", serviceName));
     if (Directory.Exists(appDir))
