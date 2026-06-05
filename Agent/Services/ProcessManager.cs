@@ -186,4 +186,48 @@ public partial class ProcessManager
 
     return process.ExitCode == 0;
   }
+
+  public async Task DeleteServiceAsync(string serviceName)
+  {
+    string svc = $"{serviceName}.service";
+
+    await RunSystemctlUser($"stop {svc}");
+    await RunSystemctlUser($"disable {svc}");
+
+    var servicePath = Path.Combine(_targetDir, svc);
+    if (File.Exists(servicePath))
+      File.Delete(servicePath);
+
+    await RunSystemctlUser("daemon-reload");
+
+    var appDir = Path.GetFullPath(Path.Combine("slice", serviceName));
+    if (Directory.Exists(appDir))
+      Directory.Delete(appDir, recursive: true);
+  }
+
+  public int? GetServicePortFromFile(string serviceName)
+  {
+    var servicePath = Path.Combine(_targetDir, $"{serviceName}.service");
+    if (!File.Exists(servicePath))
+      return null;
+
+    var lines = File.ReadAllLines(servicePath);
+    foreach (var line in lines)
+    {
+      if (line.StartsWith("Environment=ASPNETCORE_HTTP_PORTS=", StringComparison.Ordinal))
+      {
+        var val = line["Environment=ASPNETCORE_HTTP_PORTS=".Length..].Trim();
+        if (int.TryParse(val, out var port))
+          return port;
+      }
+      if (line.StartsWith("Environment=ASPNETCORE_URLS=", StringComparison.Ordinal))
+      {
+        var val = line["Environment=ASPNETCORE_URLS=".Length..].Trim();
+        var lastColon = val.LastIndexOf(':');
+        if (lastColon >= 0 && int.TryParse(val[(lastColon + 1)..], out var port))
+          return port;
+      }
+    }
+    return null;
+  }
 }

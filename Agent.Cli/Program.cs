@@ -16,5 +16,6 @@ DeployServiceCommand.Register(root, httpClient, config);
 GetServicesCommand.Register(root, httpClient);
 GetServiceStatusCommand.Register(root, httpClient);
 StopServiceCommand.Register(root, httpClient);
+RemoveServiceCommand.Register(root, httpClient);
 
 return await root.Parse(args).InvokeAsync();
