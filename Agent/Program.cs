@@ -188,7 +188,10 @@ app.MapDelete("v1/services/{serviceName}", async (
       ".config/systemd/user/", $"{fullName}.service");
 
   if (!File.Exists(servicePath))
-    return Results.NotFound();
+  {
+    await processRunner.DaemonReloadAsync();
+    return Results.NoContent();
+  }
 
   try
   {

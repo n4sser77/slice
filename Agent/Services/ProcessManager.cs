@@ -79,6 +79,9 @@ public partial class ProcessManager
     return process.ExitCode == 0;
   }
 
+  public async Task DaemonReloadAsync()
+    => await RunSystemctlUser("daemon-reload");
+
   private async Task RunSystemctlUser(string args)
   {
     using var process = Process.Start(new ProcessStartInfo
