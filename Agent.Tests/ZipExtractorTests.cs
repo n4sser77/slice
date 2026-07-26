@@ -43,5 +43,37 @@ public class ZipExtractorTests
         // CLEANUP
         if (Directory.Exists(rootDir)) Directory.Delete(rootDir, true);
     }
-}
 
+    [Theory]
+    [InlineData("../outside.txt")]
+    [InlineData("../../extracted-sibling/outside.txt")]
+    public async Task ReadAndUnzip_PathTraversalEntry_ThrowsInvalidDataException(string entryName)
+    {
+        string rootDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        string extractDir = Path.Combine(rootDir, "extracted");
+        Directory.CreateDirectory(extractDir);
+
+        try
+        {
+            using var zipStream = new MemoryStream();
+            using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                var entry = archive.CreateEntry(entryName);
+                await using var writer = new StreamWriter(entry.Open());
+                await writer.WriteAsync("malicious");
+            }
+
+            zipStream.Position = 0;
+
+            var extractor = new ZipExtractor();
+            var exception = await Assert.ThrowsAsync<InvalidDataException>(
+                () => extractor.ReadAndUnzip(zipStream, extractDir));
+
+            Assert.Contains(entryName, exception.Message);
+        }
+        finally
+        {
+            if (Directory.Exists(rootDir)) Directory.Delete(rootDir, true);
+        }
+    }
+}
