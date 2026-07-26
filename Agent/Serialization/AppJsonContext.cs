@@ -13,6 +13,7 @@ namespace Agent.Serialization;
 [JsonSerializable(typeof(ServiceStatus))]
 [JsonSerializable(typeof(DeployResult))]
 [JsonSerializable(typeof(CaddyRoute))]
+[JsonSerializable(typeof(IFormFile))]
 [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 public partial class AppJsonContext : JsonSerializerContext { }
 

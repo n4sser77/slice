@@ -6,12 +6,13 @@ using Agent.Services.Exceptions;
 using Agent.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Scalar.AspNetCore;
 using Slice.Common.Models;
 
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
-
+// op => op.AddSchemaTransformer<FormFileSchemaTransformer>()
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -39,6 +40,7 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
   app.MapOpenApi();
+  app.MapScalarApiReference();
 }
 
 
