@@ -63,7 +63,10 @@ public partial class ProcessManager
   {
     await RunSystemctlUser("daemon-reload");
     bool isActive = await IsServiceActiveAsync(appName);
-    await RunSystemctlUser(isActive ? $"restart {appName}.service" : $"enable --now {appName}.service");
+    if (isActive)
+      await RunSystemctlUser("restart", $"{appName}.service");
+    else
+      await RunSystemctlUser("enable", "--now", $"{appName}.service");
   }
 
   private async Task<bool> IsServiceActiveAsync(string appName)
@@ -71,7 +74,7 @@ public partial class ProcessManager
     using var process = Process.Start(new ProcessStartInfo
     {
       FileName = _systemctlBinary,
-      Arguments = $"--user is-active {appName}.service",
+      ArgumentList = { "--user", "is-active", $"{appName}.service" },
       UseShellExecute = false,
       CreateNoWindow = true,
     });
@@ -86,20 +89,25 @@ public partial class ProcessManager
     await RunSystemctlUser("reset-failed");
   }
 
-  private async Task RunSystemctlUser(string args)
+  private async Task RunSystemctlUser(params string[] args)
   {
-    using var process = Process.Start(new ProcessStartInfo
+    var startInfo = new ProcessStartInfo
     {
       FileName = _systemctlBinary,
-      Arguments = $"--user {args}",
       UseShellExecute = false,
       CreateNoWindow = true,
       RedirectStandardError = true,
-    }) ?? throw new InvalidOperationException($"Failed to start systemctl with args: {args}");
+    };
+    startInfo.ArgumentList.Add("--user");
+    foreach (var arg in args)
+      startInfo.ArgumentList.Add(arg);
+
+    using var process = Process.Start(startInfo)
+        ?? throw new InvalidOperationException($"Failed to start systemctl with args: {string.Join(' ', args)}");
     string error = await process.StandardError.ReadToEndAsync();
     await process.WaitForExitAsync();
     if (process.ExitCode != 0)
-      throw new SystemctlException($"systemctl --user {args} failed: {error.Trim()}");
+      throw new SystemctlException($"systemctl --user {string.Join(' ', args)} failed: {error.Trim()}");
   }
 
   public async Task<int> CreateSystemdService(string appName, string dllName, string? allowedHost = null)
@@ -198,8 +206,8 @@ public partial class ProcessManager
   {
     string svc = $"{serviceName}.service";
 
-    await RunSystemctlUser($"stop {svc}");
-    await RunSystemctlUser($"disable {svc}");
+    await RunSystemctlUser("stop", svc);
+    await RunSystemctlUser("disable", svc);
 
     var servicePath = Path.Combine(_targetDir, svc);
     if (File.Exists(servicePath))

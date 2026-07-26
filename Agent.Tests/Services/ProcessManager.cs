@@ -80,6 +80,30 @@ public class ProcessManagerTests : IDisposable
   }
 
   [Fact]
+  public async Task CreateSystemdService_PassesSystemctlArgumentsSeparately()
+  {
+    var argumentsPath = Path.Combine(_tempDir, "arguments.txt");
+    var systemctl = CreateFakeSystemctl(
+        _tempDir,
+        $"printf '%s\\n' \"$@\" >> \"{argumentsPath}\"\nexit 0");
+    var sut = new ProcessManager(_tempDir, new PortManager(), systemctl);
+
+    await sut.CreateSystemdService("slice-testapp", "testapp");
+
+    Assert.Equal(
+    [
+        "--user",
+        "daemon-reload",
+        "--user",
+        "is-active",
+        "slice-testapp.service",
+        "--user",
+        "restart",
+        "slice-testapp.service"
+    ], File.ReadAllLines(argumentsPath));
+  }
+
+  [Fact]
   public async Task GetServices_FiltersAndSortsSliceServices()
   {
     var script = """
