@@ -19,6 +19,8 @@ public class DeployServiceCommandTests
       WriteFile(publishPath, "appsettings.json");
       WriteFile(publishPath, "wwwroot/index.html");
       WriteFile(publishPath, "wwwroot/_framework/blazor.webassembly.js");
+      WriteFile(publishPath, "wwwroot/css/app.css", "css");
+      WriteFile(publishPath, "wwwroot/js/app.css", "javascript");
 
       using var httpClient = new HttpClient();
       var config = new CliConfig(new Uri("http://localhost:5165/v1/"), "linux-arm64");
@@ -36,6 +38,8 @@ public class DeployServiceCommandTests
       Assert.Contains("appsettings.json", entries);
       Assert.Contains("wwwroot/index.html", entries);
       Assert.Contains("wwwroot/_framework/blazor.webassembly.js", entries);
+      Assert.Equal("css", ReadEntry(archive, "wwwroot/css/app.css"));
+      Assert.Equal("javascript", ReadEntry(archive, "wwwroot/js/app.css"));
     }
     finally
     {
@@ -44,10 +48,16 @@ public class DeployServiceCommandTests
     }
   }
 
-  private static void WriteFile(string root, string relativePath)
+  private static void WriteFile(string root, string relativePath, string? content = null)
   {
     var path = Path.Combine(root, relativePath);
     Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-    File.WriteAllText(path, relativePath);
+    File.WriteAllText(path, content ?? relativePath);
+  }
+
+  private static string ReadEntry(ZipArchive archive, string path)
+  {
+    using var reader = new StreamReader(archive.GetEntry(path)!.Open());
+    return reader.ReadToEnd();
   }
 }
