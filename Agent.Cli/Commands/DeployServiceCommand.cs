@@ -174,17 +174,23 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
     }
   }
 
-  private (MemoryStream? zipStream, string? fileName, ErrorResult? error) TryCreatePackage(string publishPath)
+  internal (MemoryStream? zipStream, string? fileName, ErrorResult? error) TryCreatePackage(string publishPath)
   {
     try
     {
       var ms = new MemoryStream();
       using (var arc = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
       {
-        var files = Directory.EnumerateFiles(publishPath);
+        var files = Directory.EnumerateFiles(
+            publishPath,
+            "*",
+            SearchOption.AllDirectories);
+
         foreach (var file in files)
         {
-          var entry = arc.CreateEntry(Path.GetFileName(file));
+          var relativePath = Path.GetRelativePath(publishPath, file)
+              .Replace(Path.DirectorySeparatorChar, '/');
+          var entry = arc.CreateEntry(relativePath);
           using var entryStream = entry.Open();
           using var fs = File.OpenRead(file);
           fs.CopyTo(entryStream);
