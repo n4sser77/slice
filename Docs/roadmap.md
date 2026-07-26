@@ -1,172 +1,206 @@
 # Roadmap
 
-Priority order matters here. Nothing in phase N starts until phase N-1 is solid.
+Slice aims to make deploying a .NET application to a user-owned Linux server
+feel as direct as deploying to a managed platform:
 
----
+```text
+install → configure → verify → deploy → receive a URL → manage the service
+```
 
-## Phase 1 — Complete the CLI and Agent (current focus)
+Priority is based on user value, production readiness, and the smallest
+vertical slice that can be completed safely. GitHub Projects is the source of
+truth for day-to-day status, priority, and size.
 
-The CLI is the main workflow. Deploy and list are implemented. What's missing:
+## Current product
 
-- `slice start <app>` — start a stopped service
-- `slice stop <app>` — stop a running service
-- `slice restart <app>` — restart a service
-- `slice status <app>` — partially implemented, needs to be complete and reliable
+The core deployment path works:
 
-Once these are in, the CLI covers the full lifecycle of a deployed app. That's the vertical slice — ship code, see it running, manage it, all without touching the server manually.
+- The CLI publishes a .NET project for a configurable Linux runtime.
+- Complete publish output is packaged, including Blazor static assets and
+  nested `wwwroot` files.
+- The Agent extracts the artifact, allocates a port, writes a user-level
+  systemd service, and starts it.
+- Caddy can register an optional public HTTPS route.
+- The CLI can deploy, list, inspect, stop, and remove services.
+- Removal cleans up the unit, application files, port allocation, and Caddy
+  route.
+- Development environments expose OpenAPI and a Scalar API reference.
 
-**Refactor after every feature.** Not as a separate pass at the end — after each command is working. This is how the project stays maintainable and doesn't turn into the kind of codebase that burns you out.
+The core is useful, but onboarding is still manual and deployed applications
+cannot yet receive their own configuration or secrets.
 
-**Feature-based organization and vertical slice architecture** will be introduced as the CLI and agent grow. Each feature (deploy, list, status, etc.) owns its slice top to bottom — command → HTTP → agent handler → systemd. No horizontal layers that force you to touch five files for one change.
+## P0 — Production-ready deployments
 
-When the CLI is complete and stable, it works in any CI pipeline as-is. Point it at the agent, set the URL, deploy. No git integration needed for that.
+These capabilities block realistic workloads or safe exposure. They take
+priority over new surfaces such as a dashboard or Aspire integration.
 
----
+### Application environment and secrets — [#35](https://github.com/n4sser77/slice/issues/35)
 
-## Phase 2 — Web client (read-only first)
-
-A dashboard for viewing deployed services — status, logs, CPU, memory per app.
-
-Hosted inside the Agent (same process, same project). Either Razor pages or Blazor served as static files through the minimal API. No separate deployment, no extra infrastructure.
-
-Read-only to start. Once that's solid and stable, add operational support: stop, start, restart. Same operations the CLI has, nothing more.
-
-Deployment stays CLI-only until the web client is proven. The web client is not a replacement for the CLI — it's an inspection tool.
-
-AOT will likely need to be disabled for this. See notes on AOT.
-
----
-
-## Phase 3 — Git integration
-
-Last, and only after the web client is working.
-
-The plan: a `/deploy` webhook endpoint in the Agent that a GitHub Actions job hits after a push to main. The endpoint validates the request, pulls the latest code, builds, publishes, and restarts the service.
-
-Before building this in slice, I'll build a minimal version of it for slice itself — a tiny .NET minimal API that handles deploys triggered by GitHub Actions CI. This avoids opening SSH ports on the Raspberry Pi and keeps the attack surface small. The agent is the only thing exposed. Whatever I learn from that will feed directly into the implementation here.
-
-**Phase 1 of git integration** — slice deploys itself via a webhook. Lays the groundwork.
-
-**Phase 2** — extend it to user-deployed apps. Connect a repo, push to main, the agent picks it up and deploys automatically.
-
-The manual `slice deploy` stays as an alternative. Useful for one-off deploys and CI pipelines that don't want git integration.
-
----
-
-## Security
-
-Security is a hard requirement before any of this goes near production or gets exposed to the internet. Things to figure out and implement:
-
-### Must be in place before Phase 2 ships
-
-These are blockers. The web client expands the attack surface — anyone with a browser could hit the agent. None of Phase 2 goes public without these done.
-
-- **Authentication** — the agent needs to verify that requests come from a trusted source. Simple shared token or API key stored in the agent, passed by the client on every request. The CLI reads it from an env var or config file. Nothing hits the agent without it.
-- **HTTPS** — the agent should run behind a reverse proxy with TLS before being exposed publicly. Tokens over plain HTTP are not tokens, they're usernames.
-- **Input validation on service names** — every endpoint that accepts a `serviceName` must reject anything that doesn't match the `slice-*` pattern. Right now the stop and status endpoints pass the name straight to `systemctl`, which means a caller can operate on any user unit on the machine, not just deployed apps. A 400 with a clear message is enough.
-
-### Important but not Phase 2 blockers
-
-- **Token storage** — tokens on the server side stored securely, not in plaintext config if avoidable. Clients store theirs in env vars (easy to inject in CI, easy to keep out of version control).
-- **Rate limiting** — the deploy endpoint accepts large file uploads and shouldn't be hammerable. ASP.NET has built-in rate limiting middleware. A sliding window on the upload endpoint is enough to start.
-- **Least privilege** — the agent runs as a user-level systemd service, not root. Keep it that way. Review what permissions it actually needs and cut anything extra.
-- **Audit log** — know what was deployed, by whom (which token), and when. Even a simple append-only log file is better than nothing.
-
-### Phase 3 only
-
-- **Request validation for webhooks** — GitHub sends a signature with every webhook payload. Verify it before doing anything. Standard HMAC-SHA256 pattern.
-
-Still need to think through what key/token model fits best for the two different clients (CLI and GitHub Actions). Will revisit this before Phase 3.
-
----
-
-## Reverse proxy and accessibility
-
-Deploying an app is only half the job. If it's not reachable, it might as well not be running.
-
-Right now the agent assigns a port and the app listens on it. Getting to it from outside requires knowing the port, having it open, and hitting the IP directly. That's fine for local testing but not for anything real.
-
-### Short-term — Caddy (requires Docker)
-
-The simplest path to subdomain routing without touching DNS complexity: require Caddy running on the server (via Docker) and have the agent inject routes into Caddy's config dynamically.
-
-How it would work:
-- During `slice deploy`, pass a `--domain` flag (e.g. `--domain myapp.example.com`) or a subdomain flag that gets appended to a configured host domain
-- The agent registers the route in Caddy via its admin API — no file editing, no restarts
-- Caddy handles TLS automatically via Let's Encrypt
-
-A `slice set domain <app> <domain>` command would let you update the domain for an already-deployed app.
-
-This is the plan for the staging environment on the Raspberry Pi while the core deployment and management features are being built and tested. It's a workaround — takes a Docker dependency but works well enough to unblock real use.
-
-### Long-term — YARP (fully embedded, no external dependencies)
-
-The eventual goal: ship the reverse proxy as part of the agent, no Caddy, no Docker required.
-
-YARP (Yet Another Reverse Proxy) is a .NET library — it can run inside the agent process or as a companion service. The idea:
-- The agent manages YARP routing config the same way it manages systemd service files — programmatically, on deploy
-- Automatic TLS handled by the agent itself, including cert renewal via a background service
-- Install scripts to set up any required CLI tooling
-- No external dependencies, no Docker, nothing to maintain separately
-
-This is an early idea. It might not get built at all, or it might look completely different when it does. Adding it here to capture the thinking, not as a commitment.
-
----
-
-## Förenkling av användning — `slice init`
-
-Getting started with Slice today requires following [server-setup.md](server-setup.md) manually — installing .NET, configuring Caddy, setting up the agent as a systemd service, pointing the CLI at the right URL. That's a wall of steps that discourages adoption and is easy to get wrong.
-
-The goal is to automate all of it behind a single interactive command:
+Deployed applications need connection strings, API credentials, and runtime
+configuration. The intended first workflow is:
 
 ```bash
-slice init          # interactive — guides through both client and server setup
-slice init client   # configure the CLI (agent URL, auth token)
-slice init server   # provision the server environment
+slice deploy MyApp \
+  --env ConnectionStrings__Main="Host=db;Database=myapp" \
+  --env ExternalApi__Key="..."
 ```
 
-### `slice init client`
+Values will be validated by both CLI and Agent, stored in a mode `0600`
+systemd environment file, and referenced by the generated service. Slice-owned
+`ASPNETCORE_*` and `DOTNET_*` values remain reserved.
 
-Sets up the local CLI configuration interactively:
+This is the highest-value product capability because an application without
+database, API, or secret configuration is rarely production-usable.
 
-- Prompts for the agent URL (`SLICE_AGENT_URL`)
-- Prompts for the auth token (once authentication is implemented)
-- Writes config to `~/.config/slice/config.json`
-- Verifies connectivity by pinging the agent
+### Agent authentication — [#25](https://github.com/n4sser77/slice/issues/25)
 
-### `slice init server`
+Every deployment and management endpoint must require authentication. The CLI
+must attach credentials without printing or logging them, and comparisons must
+avoid timing leaks.
 
-Runs over SSH and sets up the minimum required to run the agent:
+### Secure transport — [#27](https://github.com/n4sser77/slice/issues/27)
 
-- Installs the .NET runtime if not present
-- Downloads and installs the agent binary
-- Registers the agent as a user-level systemd service
-- Enables lingering (`loginctl enable-linger`) so user services survive logout
-- Prints the agent URL and confirms it is reachable
+Authentication credentials and deployment payloads must not cross an
+untrusted network over plaintext HTTP. The initial supported approach is TLS
+termination through Caddy. Embedded proxy work is deferred.
 
-Reverse proxy setup is offered as an optional step during init. The user chooses their preferred backend:
+## P1 — Seamless first-use experience
 
+These are ordered to build on each other in small, testable slices.
+
+### 1. Health endpoint and `slice doctor` — [#41](https://github.com/n4sser77/slice/issues/41)
+
+Add a non-sensitive Agent readiness endpoint and a CLI command that explains
+whether configuration, connectivity, systemd, the .NET runtime, and the reverse
+proxy are ready. This becomes the diagnostic foundation for initialization and
+CI.
+
+### 2. Persistent CLI configuration — [#42](https://github.com/n4sser77/slice/issues/42)
+
+Load settings from `~/.config/slice/config.json` while retaining environment
+variables for CI. Precedence is:
+
+```text
+CLI option → environment variable → config file → default
 ```
-? Reverse proxy (optional):
-  ❯ None (localhost only, configure manually later)
-    Caddy (external, requires installation)
-    YARP (embedded in agent, no extra dependencies)
+
+### 3. Guided client initialization — [#43](https://github.com/n4sser77/slice/issues/43)
+
+```bash
+slice init client
 ```
 
-- **None** — agent runs without public routing. Useful for internal use or when the user prefers to configure routing manually later.
-- **Caddy** — init prompts for `BaseDomain` and `AdminUrl`, writes them to `appsettings.json`, and verifies that the Caddy Admin API is reachable. After init the agent is fully wired and `--publish` works immediately. Caddy itself must already be installed — init does not install it.
-- **YARP** — available once the embedded proxy is implemented. Init enables and configures it entirely within the agent. No external installation required.
+Prompt for the Agent URL, verify it through the health endpoint, determine the
+target runtime, and save configuration. Authentication setup joins this flow
+once #25 lands.
 
-In all cases the goal is the same: when `slice init` finishes, the chosen setup is complete and `slice deploy` works without any additional manual steps. Nginx is out of scope for now — revisit in ~6 months if there is a clear need and available time.
+### 4. Small security wins
 
-### Non-goals
+- Return generic API failures while logging internal details server-side
+  ([#29](https://github.com/n4sser77/slice/issues/29)).
+- Rate-limit expensive deployment uploads
+  ([#30](https://github.com/n4sser77/slice/issues/30)).
 
-`slice init server` is not a general-purpose provisioning tool. It installs exactly what the agent needs and nothing else — no firewall rules, no DNS, no proxy installation.
+Both are deliberately small changes with high defensive value.
 
----
+### 5. Install without cloning — [#45](https://github.com/n4sser77/slice/issues/45)
 
-## Considered but not started
+Publish the CLI as a .NET global tool and provide versioned `linux-arm64` and
+`linux-x64` Agent artifacts with checksums. A seamless setup cannot require
+every user to clone and build the repository.
 
-- Git polling (background service that polls main and auto-deploys) — possible alternative to webhooks, simpler but less immediate
-- Dashboard metrics over time (CPU/mem charts) — needs a time-series store, overkill for now
-- Multi-server support — deploy to more than one agent from the same CLI config
+## P2 — Complete and automate the workflow
+
+### Service lifecycle
+
+- `slice restart <app>` — [#10](https://github.com/n4sser77/slice/issues/10)
+- `slice start <app>` — [#46](https://github.com/n4sser77/slice/issues/46)
+
+Together with deploy, list, status, stop, and remove, these complete the basic
+service lifecycle.
+
+### Local server initialization — [#44](https://github.com/n4sser77/slice/issues/44)
+
+The first server initializer will run locally on the target:
+
+```bash
+slice init server
+```
+
+It will verify prerequisites, install a released Agent artifact, write and
+enable the user-level systemd unit, configure authentication, start the Agent,
+and run its health check.
+
+Remote SSH orchestration is intentionally deferred. Proving an idempotent local
+initializer is smaller, safer, and easier to troubleshoot.
+
+The initializer will not install operating-system packages, change firewalls,
+configure DNS, or act as a general provisioning tool.
+
+### Reliability and capacity
+
+- Expand consistent CLI and ProcessManager coverage
+  ([#13](https://github.com/n4sser77/slice/issues/13)).
+- Block deployments when the server is under unsafe resource pressure
+  ([#32](https://github.com/n4sser77/slice/issues/32)).
+
+## Later product phases
+
+### Read-only web dashboard
+
+Host a small dashboard inside the Agent for service state, CPU, memory, and
+logs. Operational actions can follow after the read-only surface is stable.
+Deployment remains CLI-first.
+
+Authentication, TLS, safe error handling, and rate limiting must be complete
+before this surface is exposed.
+
+### Git integration
+
+Keep `slice deploy` as the portable primitive used by CI. Later, add a
+signature-validated webhook flow for deployments triggered by repository
+updates. Git integration should orchestrate the existing deployment path rather
+than create a second one.
+
+### .NET Aspire applications — [#40](https://github.com/n4sser77/slice/issues/40)
+
+Use the Aspire deployment manifest as the boundary between AppHost evaluation
+and Slice. The first milestone supports .NET project resources and maps them to
+grouped systemd services. Containers and cloud resources remain later,
+explicit extensions.
+
+### Embedded reverse proxy
+
+Caddy is the supported short-term proxy. YARP remains a possible long-term
+direction, but certificate issuance, renewal, persistence, and failure recovery
+make it a separate product effort rather than a current dependency.
+
+## Security status
+
+Completed hardening includes:
+
+- Slice-managed service-name validation.
+- Safe `systemctl` argument boundaries.
+- Uploaded DLL-name sanitization.
+- ZIP traversal rejection.
+- Port and reverse-proxy cleanup during removal.
+- `NoNewPrivileges` and `PrivateTmp` for deployed services.
+
+Still required before production exposure:
+
+- Application environment/secrets (#35).
+- Agent authentication (#25).
+- TLS for Agent traffic (#27).
+- Generic external errors with structured internal logging (#29).
+- Deployment rate limiting (#30).
+
+## Product principles
+
+- Build vertical slices: CLI → HTTP contract → Agent → systemd → tests.
+- Prefer a small complete workflow over a large partially connected feature.
+- Keep manual `slice deploy` useful even after init, web, Git, and Aspire work.
+- Preserve environment variables for CI even when interactive configuration is
+  introduced.
+- Never make insecure public exposure the easy default.
+- Update documentation and the changelog in the same commit as user-visible
+  behavior.

@@ -21,6 +21,8 @@ recorded under **Unreleased**.
 
 ### Changed
 
+- Reorganized the roadmap around production blockers, seamless onboarding,
+  and prioritized GitHub Project backlog items.
 - Deployment packages now preserve nested publish output, enabling Blazor
   static assets, `wwwroot`, and application configuration files to deploy.
 - The CLI deployment target can be configured with
@@ -48,4 +50,3 @@ recorded under **Unreleased**.
   instead of interpolated argument strings.
 - Restrict service management operations to validated `slice-*` unit names.
 - Run deployed services with `NoNewPrivileges` and `PrivateTmp`.
-
