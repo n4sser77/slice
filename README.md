@@ -34,6 +34,13 @@ Point the CLI at your server:
 export SLICE_AGENT_URL=http://<your-server-ip>:5165
 ```
 
+The CLI publishes applications for `linux-arm64` by default. To deploy
+to another architecture, set the target to a .NET runtime identifier:
+
+```bash
+export SLICE_AGENT_TARGET_HOST=linux-x64
+```
+
 Once installed, the `slice` command is available everywhere on your machine:
 
 ```bash
