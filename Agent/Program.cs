@@ -59,7 +59,7 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
   {
     appSafePath = namingService.GetSafeAppName(file.FileName);
     string displayName = namingService.GetRawAppName(file.FileName);
-    string dllName = Path.GetFileNameWithoutExtension(file.FileName);
+    string dllName = namingService.GetRawAppName(file.FileName);
     var uploadPath = namingService.GetUploadPath(appSafePath);
     Directory.CreateDirectory(uploadPath);
     var z = new ZipExtractor();
