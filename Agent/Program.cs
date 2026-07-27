@@ -14,6 +14,13 @@ var builder = WebApplication.CreateSlimBuilder(args);
 
 // op => op.AddSchemaTransformer<FormFileSchemaTransformer>()
 builder.Services.AddOpenApi();
+builder.Services.AddProblemDetails(options =>
+{
+  options.CustomizeProblemDetails = context =>
+      context.ProblemDetails.Extensions.TryAdd(
+          "traceId",
+          context.HttpContext.TraceIdentifier);
+});
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
   options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonContext.Default);
@@ -36,6 +43,9 @@ builder.Services.AddHttpClient<IReverseProxyClient, CaddyClient>((sp, client) =>
 });
 
 var app = builder.Build();
+var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Agent.Api");
+
+app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
 {
@@ -46,6 +56,7 @@ if (app.Environment.IsDevelopment())
 
 
 app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
+    HttpContext context,
     IFormFile file,
     [FromForm] bool publish,
     [FromForm] string? domain,
@@ -116,20 +127,40 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
   }
   catch (SystemctlException ex)
   {
-    return Results.Problem(detail: ex.Message,
-                           statusCode: (int)HttpStatusCode.InternalServerError);
+    return InternalProblem(
+        context,
+        logger,
+        ex,
+        "Failed to create the systemd service.");
   }
   catch (HttpRequestException ex)
   {
-    var rolled = await processRunner.StopServiceAsync(appSafePath!);
-    var detail = rolled
-        ? $"Caddy route registration failed: {ex.Message}. Service was rolled back."
-        : $"Caddy route registration failed: {ex.Message}. Service rollback also failed — stop it manually.";
-    return Results.Problem(detail: detail, statusCode: (int)HttpStatusCode.BadGateway);
+    var rolledBack = false;
+    try
+    {
+      rolledBack = await processRunner.StopServiceAsync(appSafePath!);
+    }
+    catch (Exception rollbackException)
+    {
+      logger.LogError(
+          rollbackException,
+          "Service rollback failed. TraceId: {TraceId}",
+          context.TraceIdentifier);
+    }
+
+    logger.LogError(
+        ex,
+        "Reverse-proxy route registration failed. TraceId: {TraceId}",
+        context.TraceIdentifier);
+
+    var detail = rolledBack
+        ? "Reverse-proxy registration failed and the service was rolled back."
+        : "Reverse-proxy registration failed and service rollback was unsuccessful.";
+    return ExternalDependencyProblem(context, detail);
   }
 }).DisableAntiforgery();
 
-app.MapGet("v1/services", async (ProcessManager processRunner) =>
+app.MapGet("v1/services", async (HttpContext context, ProcessManager processRunner) =>
 {
   try
   {
@@ -138,11 +169,14 @@ app.MapGet("v1/services", async (ProcessManager processRunner) =>
   }
   catch (SystemctlException ex)
   {
-    return Results.Problem(detail: ex.Message, statusCode: (int)HttpStatusCode.InternalServerError);
+    return InternalProblem(context, logger, ex, "Failed to list systemd services.");
   }
 });
 
-app.MapGet("v1/services/{serviceName}", async (string serviceName, ProcessManager processRunner) =>
+app.MapGet("v1/services/{serviceName}", async (
+    HttpContext context,
+    string serviceName,
+    ProcessManager processRunner) =>
 {
   var fullName = $"{FileNamingService.FilePrefix}-{serviceName}";
   if (!FileNamingService.IsValidServiceName(fullName))
@@ -158,7 +192,7 @@ app.MapGet("v1/services/{serviceName}", async (string serviceName, ProcessManage
   }
   catch (SystemctlException ex)
   {
-    return Results.Problem(detail: ex.Message, statusCode: (int)HttpStatusCode.InternalServerError);
+    return InternalProblem(context, logger, ex, "Failed to inspect the systemd service.");
   }
 });
 
@@ -176,6 +210,7 @@ app.MapPost("v1/services/{serviceName}/stop", async (string serviceName, Process
 });
 
 app.MapDelete("v1/services/{serviceName}", async (
+    HttpContext context,
     string serviceName,
     ProcessManager processRunner,
     IPortManager portManager,
@@ -208,18 +243,59 @@ app.MapDelete("v1/services/{serviceName}", async (
     {
       await proxy.RemoveRouteAsync(fullName);
     }
-    catch
+    catch (HttpRequestException ex)
     {
-      // Caddy route may not exist — that's fine
+      logger.LogWarning(
+          ex,
+          "Reverse-proxy route cleanup failed for {ServiceName}. TraceId: {TraceId}",
+          fullName,
+          context.TraceIdentifier);
     }
 
     return Results.NoContent();
   }
   catch (Exception ex)
   {
-    return Results.Problem(detail: $"Failed to remove service '{serviceName}': {ex.Message}",
-                           statusCode: (int)HttpStatusCode.InternalServerError);
+    return InternalProblem(
+        context,
+        logger,
+        ex,
+        "Failed to remove the systemd service.");
   }
 });
 
 app.Run();
+
+static IResult InternalProblem(
+    HttpContext context,
+    ILogger logger,
+    Exception exception,
+    string operation)
+{
+  logger.LogError(
+      exception,
+      "{Operation} TraceId: {TraceId}",
+      operation,
+      context.TraceIdentifier);
+
+  return Results.Problem(
+      statusCode: StatusCodes.Status500InternalServerError,
+      title: "An internal server error occurred.",
+      detail: "The request could not be completed. Use the trace ID when contacting support.",
+      extensions: new Dictionary<string, object?>
+      {
+        ["traceId"] = context.TraceIdentifier
+      });
+}
+
+static IResult ExternalDependencyProblem(HttpContext context, string detail)
+{
+  return Results.Problem(
+      statusCode: StatusCodes.Status502BadGateway,
+      title: "A required external service failed.",
+      detail: detail,
+      extensions: new Dictionary<string, object?>
+      {
+        ["traceId"] = context.TraceIdentifier
+      });
+}

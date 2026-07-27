@@ -43,6 +43,8 @@ recorded under **Unreleased**.
 
 ### Security
 
+- Standardized internal API failures as Problem Details with trace IDs while
+  retaining full exception details only in server logs.
 - Reject ZIP entries that attempt to extract outside the deployment directory.
 - Sanitize uploaded application and DLL names before using them in paths or
   systemd unit files.
