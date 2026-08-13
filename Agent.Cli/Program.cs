@@ -1,15 +1,24 @@
 using Agent.Cli;
 using Agent.Cli.Commands;
 using Microsoft.Extensions.DependencyInjection;
+using Slice.Cli.Auth;
 using System.CommandLine;
 
 var config = CliConfig.Default;
+const string clientName = "SliceClient";
+var services = new ServiceCollection();
 
-var services = new ServiceCollection()
-    .AddSingleton(new HttpClient { BaseAddress = config.BaseAddress, Timeout = TimeSpan.FromSeconds(30) })
-    .BuildServiceProvider();
+services.AddTransient<ApiKeyHandler>();
 
-var httpClient = services.GetRequiredService<HttpClient>();
+services.AddHttpClient(clientName, client =>
+{
+  client.BaseAddress = config.BaseAddress;
+  client.Timeout = TimeSpan.FromSeconds(30);
+}).AddHttpMessageHandler<ApiKeyHandler>();
+
+var sp = services.BuildServiceProvider();
+var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+var httpClient = httpClientFactory.CreateClient(clientName);
 
 var root = new RootCommand("slice — deploy and manage .NET services");
 DeployServiceCommand.Register(root, httpClient, config);
