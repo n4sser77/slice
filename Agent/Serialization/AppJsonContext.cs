@@ -2,9 +2,11 @@ using System.Text.Json.Serialization;
 using Slice.Common.Models;
 using Microsoft.AspNetCore.Mvc;
 using Agent.Services;
+using Agent.Configuration;
 
 namespace Agent.Serialization;
 
+[JsonSerializable(typeof(ReverseProxyOptions))]
 [JsonSerializable(typeof(ProblemDetails))]
 [JsonSerializable(typeof(AppService))]
 [JsonSerializable(typeof(List<AppService>))]
