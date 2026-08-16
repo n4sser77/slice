@@ -1,4 +1,5 @@
 using System.Net;
+using Agent.Auth;
 using Agent.Configuration;
 using Agent.Serialization;
 using Agent.Services;
@@ -42,6 +43,10 @@ builder.Services.AddHttpClient<IReverseProxyClient, CaddyClient>((sp, client) =>
   client.BaseAddress = new Uri(opts.AdminUrl);
 });
 
+builder.Services.AddAuthentication(ApiKeyAuthOptions.SchemeName)
+  .AddScheme<ApiKeyAuthOptions, ApiKeyAuthHandler>(ApiKeyAuthOptions.SchemeName, null);
+
+builder.Services.AddAuthorization();
 var app = builder.Build();
 var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Agent.Api");
 
@@ -52,10 +57,13 @@ if (app.Environment.IsDevelopment())
   app.MapOpenApi();
   app.MapScalarApiReference();
 }
+app.UseAuthentication();
+app.UseAuthorization();
+
+var servicesRoutes = app.MapGroup("/v1/services").RequireAuthorization();
 
 
-
-app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
+servicesRoutes.MapPost("", [RequestSizeLimit(100_000_000)] async (
     HttpContext context,
     IFormFile file,
     [FromForm] bool publish,
@@ -160,12 +168,12 @@ app.MapPost("v1/services", [RequestSizeLimit(100_000_000)] async (
   }
 }).DisableAntiforgery();
 
-app.MapGet("v1/services", async (HttpContext context, ProcessManager processRunner) =>
+servicesRoutes.MapGet("", async (HttpContext context, ProcessManager processRunner) =>
 {
   try
   {
-    var services = await processRunner.GetServices();
-    return Results.Ok(services);
+    var servicesList = await processRunner.GetServices();
+    return Results.Ok(servicesList);
   }
   catch (SystemctlException ex)
   {
@@ -173,7 +181,7 @@ app.MapGet("v1/services", async (HttpContext context, ProcessManager processRunn
   }
 });
 
-app.MapGet("v1/services/{serviceName}", async (
+servicesRoutes.MapGet("/{serviceName}", async (
     HttpContext context,
     string serviceName,
     ProcessManager processRunner) =>
@@ -196,7 +204,7 @@ app.MapGet("v1/services/{serviceName}", async (
   }
 });
 
-app.MapPost("v1/services/{serviceName}/stop", async (string serviceName, ProcessManager processManager) =>
+servicesRoutes.MapPost("/{serviceName}/stop", async (string serviceName, ProcessManager processManager) =>
 {
   var fullName = $"{FileNamingService.FilePrefix}-{serviceName}";
   if (!FileNamingService.IsValidServiceName(fullName))
@@ -209,7 +217,7 @@ app.MapPost("v1/services/{serviceName}/stop", async (string serviceName, Process
                         statusCode: (int)HttpStatusCode.InternalServerError);
 });
 
-app.MapDelete("v1/services/{serviceName}", async (
+servicesRoutes.MapDelete("/{serviceName}", async (
     HttpContext context,
     string serviceName,
     ProcessManager processRunner,
