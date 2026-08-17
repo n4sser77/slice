@@ -14,10 +14,10 @@ public class ApiKeyAuthHandler(
     UrlEncoder encoder)
   : AuthenticationHandler<ApiKeyAuthOptions>(options, logger, encoder)
 {
-  private const string _envVarFieldName = "SLICE_API_KEY";
+  private const string ApiKeyEnvVarName = "SLICE_API_KEY";
   protected override Task<AuthenticateResult> HandleAuthenticateAsync()
   {
-    string? expectedKey = Environment.GetEnvironmentVariable(_envVarFieldName);
+    string? expectedKey = Environment.GetEnvironmentVariable(ApiKeyEnvVarName);
 
     if (string.IsNullOrEmpty(expectedKey))
     {
