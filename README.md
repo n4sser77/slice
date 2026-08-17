@@ -25,7 +25,7 @@ Clone and install:
 git clone https://github.com/n4sser77/slice.git
 cd slice
 dotnet pack Agent.Cli --configuration Release
-dotnet tool install --global --add-source ./Agent.Cli/bin/Release slice
+dotnet tool install --global --add-source ./Agent.Cli/bin/Release Slice.Client
 ```
 
 Point the CLI at your server:
