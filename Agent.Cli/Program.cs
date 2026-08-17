@@ -16,7 +16,7 @@ services.AddHttpClient(clientName, client =>
   client.Timeout = TimeSpan.FromSeconds(30);
 }).AddHttpMessageHandler<ApiKeyHandler>();
 
-var sp = services.BuildServiceProvider();
+using var sp = services.BuildServiceProvider();
 var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
 var httpClient = httpClientFactory.CreateClient(clientName);
 
