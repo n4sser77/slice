@@ -32,7 +32,14 @@ Point the CLI at your server:
 
 ```bash
 export SLICE_AGENT_URL=http://<your-server-ip>:5165
+export SLICE_API_KEY='<the-key-configured-on-the-agent>'
 ```
+
+The agent requires API-key authentication. For production, generate a strong random
+key and load it from a protected systemd environment file instead of putting it in
+the service definition or committing it to the repository. See
+[Server setup: Configure API-key authentication](Docs/server-setup.md#step-3--configure-api-key-authentication)
+for setup, verification, rotation, and network-safety guidance.
 
 The CLI publishes applications for `linux-arm64` by default. To deploy
 to another architecture, set the target to a .NET runtime identifier:
@@ -66,11 +73,11 @@ Clone the repo and use `dotnet run` directly — no install needed:
 
 ```bash
 # terminal 1: start the agent (runs on http://localhost:5165)
-dotnet run --project Agent
+SLICE_API_KEY='development-only-key' dotnet run --project Agent
 
 # terminal 2: use the CLI against the local agent
-dotnet run --project Agent.Cli -- deploy MyApp
-dotnet run --project Agent.Cli -- list
+SLICE_API_KEY='development-only-key' dotnet run --project Agent.Cli -- deploy MyApp
+SLICE_API_KEY='development-only-key' dotnet run --project Agent.Cli -- list
 
 # run the tests
 dotnet test
