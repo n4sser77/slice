@@ -56,8 +56,7 @@ public class ApiKeyAuthHandler(
       return false;
     }
 
-    bool providedKeyIsValid =
-      !CryptographicOperations
+    bool providedKeyIsValid = CryptographicOperations
       .FixedTimeEquals(Encoding.UTF8.GetBytes(providedKey),
                        Encoding.UTF8.GetBytes(expectedKey));
 
