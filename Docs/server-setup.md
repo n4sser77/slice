@@ -2,7 +2,10 @@
 
 No Docker yet — this is early and experimental. You set it up manually.
 
-> **Security warning:** Authentication is not yet implemented. Do not expose port 5165 publicly or put it behind a reverse proxy that makes it reachable from the internet. Access it only over a VPN or local network. Auth is planned — this restriction is temporary.
+> **Security warning:** The agent can deploy and control processes on the host. API-key
+> authentication is required, but it does not encrypt traffic. Keep port 5165 behind
+> a firewall or VPN. If it must cross an untrusted network, put it behind HTTPS and
+> do not expose the plain HTTP listener publicly.
 
 ---
 
@@ -62,7 +65,35 @@ dotnet --list-runtimes
 
 ---
 
-## Step 3 — Create the systemd service
+## Step 3 — Configure API-key authentication
+
+Generate a separate, high-entropy key on the server:
+
+```bash
+mkdir -p ~/.config/slice
+umask 077
+openssl rand -hex 32 > ~/.config/slice/api-key
+printf 'SLICE_API_KEY=' > ~/.config/slice/agent.env
+cat ~/.config/slice/api-key >> ~/.config/slice/agent.env
+chmod 600 ~/.config/slice/api-key ~/.config/slice/agent.env
+```
+
+The environment file should contain one line in this form:
+
+```text
+SLICE_API_KEY=<random-key>
+```
+
+Do not commit either file, paste the key into the systemd unit, or reuse a password
+or key from another service. The agent refuses authenticated endpoints when
+`SLICE_API_KEY` is missing or empty.
+
+Copy `~/.config/slice/api-key` to each trusted CLI machine over a secure channel.
+Keep the copy readable only by your user.
+
+---
+
+## Step 4 — Create the systemd service
 
 ```bash
 mkdir -p ~/.config/systemd/user
@@ -80,6 +111,7 @@ WorkingDirectory=/home/<your-user>/slice/Agent/bin/Release/net10.0/linux-arm64/p
 ExecStart=/home/<your-user>/slice/Agent/bin/Release/net10.0/linux-arm64/publish/Agent
 Restart=always
 Environment=ASPNETCORE_HTTP_PORTS=5165
+EnvironmentFile=%h/.config/slice/agent.env
 
 [Install]
 WantedBy=default.target
@@ -97,6 +129,7 @@ ExecStart=<path-to-dotnet> /home/<your-user>/slice/agent-out/Agent.dll
 Restart=always
 Environment=ASPNETCORE_HTTP_PORTS=5165
 Environment=DOTNET_ROOT=<your-dotnet-root>
+EnvironmentFile=%h/.config/slice/agent.env
 
 [Install]
 WantedBy=default.target
@@ -125,7 +158,7 @@ DOTNET_ROOT=/usr/share/dotnet
 
 ---
 
-## Step 4 — Enable and start it
+## Step 5 — Enable and start it
 
 ```bash
 systemctl --user daemon-reload
@@ -137,7 +170,7 @@ The agent is now running on port 5165.
 
 ---
 
-## Step 5 — Set up Caddy (required for public URLs)
+## Step 6 — Set up Caddy (required for public URLs)
 
 Caddy acts as the reverse proxy. It routes traffic from `myapp.yourdomain.com` to the right app and handles HTTPS automatically via Let's Encrypt.
 
@@ -175,7 +208,7 @@ Make sure your router forwards **port 80** and **port 443** to your server — L
 
 ---
 
-## Step 6 — Configure the agent
+## Step 7 — Configure the agent
 
 The agent reads reverse proxy settings from `appsettings.json` in the publish directory. The defaults are:
 
@@ -190,21 +223,52 @@ Change `BaseDomain` to your own domain if needed.
 
 ---
 
-## Step 7 — Point your CLI at the server
+## Step 8 — Configure and verify the CLI
 
-On your local machine, set the agent URL:
+On your local machine, protect the copied key and export the agent URL and key:
 
 ```bash
+chmod 600 ~/.config/slice/api-key
 export SLICE_AGENT_URL=http://<your-server-ip>:5165
+export SLICE_API_KEY="$(cat ~/.config/slice/api-key)"
 ```
 
-Add it to `~/.bashrc` or `~/.zshrc` to make it permanent.
+You can add the URL to `~/.bashrc` or `~/.zshrc`. Avoid writing the key itself into
+shell startup files or command history; load it from the protected file instead.
+All `slice` commands send the key as a Bearer token, so use HTTPS or a trusted
+private network to prevent interception.
 
 Verify it works:
 
 ```bash
 slice list
 ```
+
+An incorrect or missing key returns `Unauthorized`. Confirm that the CLI and agent
+process receive the same value if that happens:
+
+```bash
+systemctl --user show slice-agent.service --property=EnvironmentFiles
+test -n "$SLICE_API_KEY" && echo "CLI API key is set"
+journalctl --user -u slice-agent.service -n 50
+```
+
+### Rotate the API key
+
+Generate a new key, replace the contents of both protected key files, and restart
+the agent. Existing CLI sessions keep the old environment value, so reload it after
+the server restarts:
+
+```bash
+# server, after replacing ~/.config/slice/agent.env
+systemctl --user restart slice-agent.service
+
+# each CLI machine, after replacing ~/.config/slice/api-key
+export SLICE_API_KEY="$(cat ~/.config/slice/api-key)"
+```
+
+The agent accepts one key at a time, so coordinate rotation to avoid a temporary
+loss of CLI access.
 
 ---
 
@@ -221,7 +285,8 @@ slice deploy MyApp --publish
 slice deploy MyApp --publish --domain myapp.example.com
 ```
 
-> The agent has no authentication yet — make sure port 5165 is only reachable from machines you trust. Don't expose it publicly.
+> API-key authentication does not replace network isolation or TLS. Keep port 5165
+> reachable only from trusted machines, preferably over a VPN or private network.
 
 ---
 
