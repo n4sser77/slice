@@ -18,6 +18,10 @@ recorded under **Unreleased**.
 - Scalar API reference in development environments.
 - Architecture, roadmap, server setup, and deployment target documentation.
 - CI helper for updating and deploying the Slice agent.
+- Runtime-neutral application configuration through repeated `--config`
+  options or an explicit dotenv-style `--config-file`.
+- Agent capability discovery so the CLI rejects configuration deployments to
+  older Agents before building an application.
 
 ### Changed
 
@@ -30,6 +34,8 @@ recorded under **Unreleased**.
 - Service removal now deletes its systemd unit and application files, releases
   its port, reloads systemd state, and removes its reverse-proxy route.
 - Service discovery filters stale and non-Slice systemd entries.
+- Redeployment preserves stored application configuration when no new input is
+  supplied; any explicit configuration input replaces the complete snapshot.
 
 ### Fixed
 
@@ -52,3 +58,9 @@ recorded under **Unreleased**.
   instead of interpolated argument strings.
 - Restrict service management operations to validated `slice-*` unit names.
 - Run deployed services with `NoNewPrivileges` and `PrivateTmp`.
+- Validate application configuration in both CLI and Agent, reserve Slice-owned
+  host variables, and keep values out of error messages.
+- Store canonical configuration and generated systemd environment files using
+  private permissions and atomic replacement.
+- Exclude `.env.slice` and explicitly selected configuration files from
+  deployment archives.

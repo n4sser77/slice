@@ -53,6 +53,26 @@ public class ProcessManagerTests : IDisposable
   }
 
   [Fact]
+  public async Task CreateSystemdService_AttachesConfigurationEnvironmentFileWhenPresent()
+  {
+    var environmentFile = Path.Combine(_tempDir, "systemd.env");
+
+    await _sut.CreateSystemdService("slice-myapp", "myapp", environmentFile: environmentFile);
+
+    var content = File.ReadAllText(Path.Combine(_tempDir, "slice-myapp.service"));
+    Assert.Contains($"EnvironmentFile=\"{environmentFile}\"", content);
+  }
+
+  [Fact]
+  public async Task CreateSystemdService_OmitsConfigurationEnvironmentFileWhenAbsent()
+  {
+    await _sut.CreateSystemdService("slice-myapp", "myapp");
+
+    var content = File.ReadAllText(Path.Combine(_tempDir, "slice-myapp.service"));
+    Assert.DoesNotContain("EnvironmentFile=", content);
+  }
+
+  [Fact]
   public async Task CreateSystemdService_ThrowsWhenDotnetRootIsNotSet()
   {
     var previous = Environment.GetEnvironmentVariable("DOTNET_ROOT");

@@ -48,6 +48,37 @@ public class DeployServiceCommandTests
     }
   }
 
+  [Fact]
+  public void TryCreatePackage_ExcludesSliceConfigurationFiles()
+  {
+    var publishPath = Path.Combine(
+        Path.GetTempPath(),
+        $"slice-package-tests-{Guid.NewGuid():N}");
+
+    try
+    {
+      WriteFile(publishPath, "Demo.dll");
+      WriteFile(publishPath, ".env.slice", "default-secret");
+      WriteFile(publishPath, "production.secrets", "selected-secret");
+
+      using var httpClient = new HttpClient();
+      var config = new CliConfig(new Uri("http://localhost:5165/v1/"), "linux-arm64");
+      var sut = new DeployServiceCommand("Demo", false, null, httpClient, config);
+
+      var result = sut.TryCreatePackage(publishPath, "production.secrets");
+
+      using var archive = new ZipArchive(result.zipStream!, ZipArchiveMode.Read);
+      Assert.Contains(archive.Entries, entry => entry.FullName == "Demo.dll");
+      Assert.DoesNotContain(archive.Entries, entry => entry.FullName == ".env.slice");
+      Assert.DoesNotContain(archive.Entries, entry => entry.FullName == "production.secrets");
+    }
+    finally
+    {
+      if (Directory.Exists(publishPath))
+        Directory.Delete(publishPath, true);
+    }
+  }
+
   private static void WriteFile(string root, string relativePath, string? content = null)
   {
     var path = Path.Combine(root, relativePath);

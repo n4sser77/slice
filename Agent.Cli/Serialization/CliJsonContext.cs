@@ -7,5 +7,9 @@ namespace Agent.Cli.Serialization;
 [JsonSerializable(typeof(List<SystemdService>))]
 [JsonSerializable(typeof(ServiceStatus))]
 [JsonSerializable(typeof(DeployResult))]
-[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(ApplicationConfiguration))]
+[JsonSerializable(typeof(AgentCapabilities))]
+[JsonSourceGenerationOptions(
+    PropertyNameCaseInsensitive = true,
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 public partial class CliJsonContext : JsonSerializerContext { }

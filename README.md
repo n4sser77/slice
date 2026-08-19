@@ -54,12 +54,46 @@ Once installed, the `slice` command is available everywhere on your machine:
 slice deploy MyApp                                         # localhost only
 slice deploy MyApp --publish                               # public HTTPS URL
 slice deploy MyApp --publish --domain myapp.example.com   # custom domain
+slice deploy MyApp --config ConnectionStrings:Postgres='Host=db;Database=myapp'
 slice list
 slice status myapp
 slice stop myapp
 ```
 
 The CLI packages your app, sends it to the agent running on your server, and the agent handles the rest — systemd service, port, and optionally a public HTTPS URL via Caddy.
+
+### Application configuration and secrets
+
+Use the same colon-separated keys as .NET user secrets:
+
+```bash
+slice deploy MyApp \
+  --config 'ConnectionStrings:Postgres=Host=db;Database=myapp' \
+  --config 'ExternalApi:Key=replace-me'
+```
+
+For secrets, prefer an explicitly selected `.env.slice` file so values do not
+enter shell history:
+
+```dotenv
+# .env.slice (ignored by Git)
+ConnectionStrings:Postgres="Host=db;Database=myapp;Password=replace-me"
+ExternalApi:Key="replace-me"
+```
+
+```bash
+slice deploy MyApp --config-file .env.slice
+```
+
+Slice does not discover configuration files automatically. File values form the
+base and repeated `--config` options override matching keys. Supplying either
+option replaces the app's complete stored configuration; deploying with neither
+preserves it. An explicitly selected empty file clears it.
+
+The Agent stores a runtime-neutral snapshot and converts .NET hierarchy (`:`) to
+the systemd environment form (`__`). See
+[Server setup: Application configuration and secrets](Docs/server-setup.md#application-configuration-and-secrets)
+for syntax, storage, limits, and the security model.
 
 **The agent needs to be running on your server first.** See [Docs/server-setup.md](Docs/server-setup.md) for how to get it running.
 
