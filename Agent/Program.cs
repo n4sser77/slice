@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using Agent.Auth;
 using Agent.Configuration;
 using Agent.Serialization;
@@ -30,6 +31,10 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 var systemdPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config/systemd/user/");
 
 builder.Services.AddTransient<FileNamingService>();
+builder.Services.AddSingleton<ApplicationDataPaths>();
+builder.Services.AddSingleton<IApplicationConfigurationStore, ApplicationConfigurationStore>();
+builder.Services.AddSingleton<IRuntimeConfigurationMaterializer, SystemdEnvironmentMaterializer>();
+builder.Services.AddSingleton<ApplicationConfigurationManager>();
 builder.Services.AddSingleton<IPortManager, PortManager>();
 builder.Services.AddTransient(sp =>
         new ProcessManager(systemdPath, sp.GetRequiredService<IPortManager>()));
@@ -62,27 +67,36 @@ app.UseAuthorization();
 
 var servicesRoutes = app.MapGroup("/v1/services").RequireAuthorization();
 
+app.MapGet("/v1/capabilities", () => Results.Ok(new AgentCapabilities(
+    [AgentFeatures.ApplicationConfigurationV1])))
+    .RequireAuthorization();
+
 
 servicesRoutes.MapPost("", [RequestSizeLimit(100_000_000)] async (
     HttpContext context,
     IFormFile file,
     [FromForm] bool publish,
     [FromForm] string? domain,
+    [FromForm] string? configuration,
     ProcessManager processRunner,
     FileNamingService namingService,
+    ApplicationConfigurationManager configurationManager,
     IReverseProxyClient proxy,
     IOptions<ReverseProxyOptions> proxyOptions) =>
 {
-  string? appSafePath = null;
+  string? deployedServiceName = null;
   try
   {
-    appSafePath = namingService.GetSafeAppName(file.FileName);
+    deployedServiceName = namingService.GetSafeAppName(file.FileName);
     string displayName = namingService.GetRawAppName(file.FileName);
     string dllName = namingService.GetRawAppName(file.FileName);
-    var uploadPath = namingService.GetUploadPath(appSafePath);
+
+    var requestedConfiguration = ParseRequestedConfiguration(configuration);
+
+    var uploadPath = namingService.GetUploadPath(deployedServiceName);
     Directory.CreateDirectory(uploadPath);
-    var z = new ZipExtractor();
-    await z.ReadAndUnzip(file.OpenReadStream(), uploadPath);
+    var archiveExtractor = new ZipExtractor();
+    await archiveExtractor.ReadAndUnzip(file.OpenReadStream(), uploadPath);
 
     var dllPath = Path.Combine(Path.GetFullPath(uploadPath), dllName + ".dll");
     if (!File.Exists(dllPath))
@@ -108,12 +122,20 @@ servicesRoutes.MapPost("", [RequestSizeLimit(100_000_000)] async (
       targetDomain = domain ?? $"{displayName}.{opts.BaseDomain}";
     }
 
-    var port = await processRunner.CreateSystemdService(appSafePath, dllName, targetDomain);
+    var environmentFile = await configurationManager.PrepareRuntimeAsync(
+        deployedServiceName,
+        requestedConfiguration,
+        context.RequestAborted);
+    var port = await processRunner.CreateSystemdService(
+        deployedServiceName,
+        dllName,
+        targetDomain,
+        environmentFile);
 
     string? publicUrl = null;
     if (targetDomain is not null)
     {
-      await proxy.RegisterRouteAsync(appSafePath, targetDomain, port);
+      await proxy.RegisterRouteAsync(deployedServiceName, targetDomain, port);
       publicUrl = $"https://{targetDomain}";
     }
 
@@ -127,6 +149,12 @@ servicesRoutes.MapPost("", [RequestSizeLimit(100_000_000)] async (
   catch (InvalidDataException ex)
   {
     return Results.Problem(detail: ex.Message, statusCode: (int)HttpStatusCode.BadRequest);
+  }
+  catch (JsonException)
+  {
+    return Results.Problem(
+        detail: "Application configuration is not valid JSON.",
+        statusCode: (int)HttpStatusCode.BadRequest);
   }
   catch (OutOfPortsException ex)
   {
@@ -146,7 +174,7 @@ servicesRoutes.MapPost("", [RequestSizeLimit(100_000_000)] async (
     var rolledBack = false;
     try
     {
-      rolledBack = await processRunner.StopServiceAsync(appSafePath!);
+      rolledBack = await processRunner.StopServiceAsync(deployedServiceName!);
     }
     catch (Exception rollbackException)
     {
@@ -222,7 +250,8 @@ servicesRoutes.MapDelete("/{serviceName}", async (
     string serviceName,
     ProcessManager processRunner,
     IPortManager portManager,
-    IReverseProxyClient proxy) =>
+    IReverseProxyClient proxy,
+    ApplicationConfigurationManager configurationManager) =>
 {
   var fullName = $"{FileNamingService.FilePrefix}-{serviceName}";
   if (!FileNamingService.IsValidServiceName(fullName))
@@ -235,6 +264,7 @@ servicesRoutes.MapDelete("/{serviceName}", async (
   if (!File.Exists(servicePath))
   {
     await processRunner.ResetUnitCacheAsync();
+    await configurationManager.DeleteAsync(fullName);
     return Results.NoContent();
   }
 
@@ -243,6 +273,7 @@ servicesRoutes.MapDelete("/{serviceName}", async (
     var port = processRunner.GetServicePortFromFile(fullName);
 
     await processRunner.DeleteServiceAsync(fullName);
+    await configurationManager.DeleteAsync(fullName);
 
     if (port is not null)
       portManager.ReleasePort(port.Value);
@@ -273,6 +304,22 @@ servicesRoutes.MapDelete("/{serviceName}", async (
 });
 
 app.Run();
+
+static ApplicationConfiguration? ParseRequestedConfiguration(string? json)
+{
+  if (json is null)
+    return null;
+
+  var configuration = JsonSerializer.Deserialize(
+      json,
+      AppJsonContext.Default.ApplicationConfiguration)
+      ?? throw new InvalidDataException("Application configuration cannot be null.");
+  var validationError = ApplicationConfigurationValidator.Validate(configuration);
+  if (validationError is not null)
+    throw new InvalidDataException(validationError);
+
+  return configuration;
+}
 
 static IResult InternalProblem(
     HttpContext context,

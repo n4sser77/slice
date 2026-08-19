@@ -110,16 +110,22 @@ public partial class ProcessManager
       throw new SystemctlException($"systemctl --user {string.Join(' ', args)} failed: {error.Trim()}");
   }
 
-  public async Task<int> CreateSystemdService(string appName, string dllName, string? allowedHost = null)
+  public async Task<int> CreateSystemdService(
+      string appName,
+      string dllName,
+      string? allowedHost = null,
+      string? environmentFile = null)
   {
     string appDir = Path.GetFullPath(Path.Combine("slice", appName));
-    int? nullablePort = _portManager.ReserveNextPort();
+    int port = _portManager.ReserveNextPort() ?? throw new OutOfPortsException();
 
-    int port = nullablePort is null ?
-        throw new OutOfPortsException() :
-        (int)nullablePort;
-
-    string serviceContent = ConstructServicefile(appName, dllName, appDir, port, allowedHost);
+    string serviceContent = ConstructServiceFile(
+        appName,
+        dllName,
+        appDir,
+        port,
+        allowedHost,
+        environmentFile);
 
     var servicePath = Path.Combine(_targetDir, $"{appName}.service");
     Directory.CreateDirectory(_targetDir);
@@ -129,20 +135,21 @@ public partial class ProcessManager
     return port;
   }
 
-  private static (string, string) ConstructCustomDomainUrl(string appName, int port)
+  private static string ConstructServiceFile(
+      string appName,
+      string dllName,
+      string appDir,
+      int port,
+      string? allowedHost = null,
+      string? environmentFile = null)
   {
-    var domain = "127.0.0.1";
+    const string domain = "127.0.0.1";
     var url = $"http://{domain}:{port}";
-    return (domain, url);
-  }
-
-  private static string ConstructServicefile(string appName, string dllName, string appDir, int port, string? allowedHost = null)
-  {
-    var (domain, url) = ConstructCustomDomainUrl(appName, port);
     var hostFilter = allowedHost ?? domain;
     var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT")
         ?? throw new InvalidOperationException("DOTNET_ROOT is not set. Ensure dotnet is installed and DOTNET_ROOT is configured.");
     var dotnetExe = Path.Combine(dotnetRoot, "dotnet");
+    var environmentFileDirective = BuildEnvironmentFileDirective(environmentFile);
     return
     $"""
         [Unit]
@@ -155,7 +162,7 @@ public partial class ProcessManager
         NoNewPrivileges=true
         PrivateTmp=true
 
-        Environment=ASPNETCORE_HTTP_PORTS={port}
+        {environmentFileDirective}Environment=ASPNETCORE_HTTP_PORTS={port}
         Environment=ASPNETCORE_URLS={url}
         Environment=ASPNETCORE_ENVIRONMENT=Production
         Environment=ASPNETCORE_HOSTFILTERING__ALLOWEDHOSTS={hostFilter}
@@ -165,6 +172,16 @@ public partial class ProcessManager
         WantedBy=default.target
         """;
   }
+
+  private static string EscapeSystemdString(string value) =>
+      value.Replace("\\", "\\\\", StringComparison.Ordinal)
+          .Replace("\"", "\\\"", StringComparison.Ordinal);
+
+  private static string BuildEnvironmentFileDirective(string? environmentFile) =>
+      environmentFile is null
+          ? string.Empty
+          : $"EnvironmentFile=\"{EscapeSystemdString(environmentFile)}\"\n";
+
   public async Task<ServiceStatus?> GetServiceStatusAsync(string serviceName)
   {
     var psi = new ProcessStartInfo

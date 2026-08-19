@@ -285,6 +285,94 @@ slice deploy MyApp --publish
 slice deploy MyApp --publish --domain myapp.example.com
 ```
 
+### Application configuration and secrets
+
+Slice accepts one conventional key format and adapts it to the target runtime.
+For .NET applications, use colon-separated hierarchy just as you would with
+`dotnet user-secrets` or `appsettings.json`:
+
+```bash
+slice deploy MyApp \
+  --config 'ConnectionStrings:Postgres=Host=db;Database=myapp' \
+  --config 'Serilog:WriteTo:0:Name=Console'
+```
+
+Command-line values can be visible in shell history and process listings. Put
+secrets in a private file instead:
+
+```bash
+umask 077
+touch .env.slice
+chmod 600 .env.slice
+```
+
+```dotenv
+# Blank lines and full-line comments are allowed.
+ConnectionStrings:Postgres="Host=db;Database=myapp;Password=replace-me"
+ExternalApi:Key='replace-me'
+PUBLIC_ORIGIN=https://app.example.com/path#fragment
+EMPTY_VALUE=
+```
+
+Deploy it explicitly:
+
+```bash
+slice deploy MyApp --config-file .env.slice
+```
+
+Slice never auto-loads `.env.slice`. The file supports unquoted, single-quoted,
+and double-quoted values; `\\`, `\"`, `\'`, `\n`, `\r`, and `\t` escapes; and
+inline comments when whitespace precedes `#`. It deliberately does not support
+`export`, variable expansion such as `$DATABASE_URL`, or multiline source
+entries. The first `=` separates the key from its value.
+
+#### Precedence and redeployment
+
+Configuration is an app-level snapshot, not a patch:
+
+| Deployment input | Result |
+| --- | --- |
+| No `--config` or `--config-file` | Preserve the stored configuration |
+| `--config-file FILE` | Replace it with the file |
+| File plus `--config KEY=VALUE` | Replace it; command-line keys override file keys |
+| Explicit empty file | Clear it |
+
+Duplicate keys within the file or within the command-line options are rejected
+case-insensitively. Slice validates before building or changing the deployed app.
+An older Agent that lacks configuration support is also rejected before build.
+
+Keys may be flat (`DATABASE_URL`) or hierarchical
+(`ConnectionStrings:Postgres`, `Serilog:WriteTo:0:Name`). Use `:`, never `__`;
+Slice converts hierarchy for each runtime. `ASPNETCORE_*` and `DOTNET_*` roots are
+reserved because Slice manages the service host. A deployment may contain at
+most 128 entries, a 256-character key, 64 KiB per value, and 256 KiB total.
+
+#### Storage and systemd
+
+The Agent keeps the canonical, versioned snapshot here:
+
+```text
+$XDG_DATA_HOME/slice/apps/<service>/configuration.json
+```
+
+If `XDG_DATA_HOME` is unset, it uses
+`~/.local/share/slice/apps/<service>/configuration.json`. For systemd, Slice
+atomically generates `runtime/systemd.env`, changes `:` to `__`, and references
+that file from the app's unit. Managed directories use mode `0700`; canonical
+and runtime files use `0600`. Removing an app removes both copies. Selected
+configuration files and `.env.slice` are excluded from deployment archives.
+
+This boundary is intentionally runtime-neutral: a future Docker or Kubernetes
+adapter can materialize the same canonical values in its own format without
+changing what users enter.
+
+Mode `0600` protects values from other unprivileged operating-system users, but
+it is not a vault. Processes running as the same Unix user as the Agent or app,
+and root, may be able to read them. Slice currently treats apps deployed under
+one Agent account as mutually trusted. Use separate OS users or machines when
+applications must be isolated from one another, and keep the Agent behind TLS or
+a trusted private network.
+
 > API-key authentication does not replace network isolation or TLS. Keep port 5165
 > reachable only from trusted machines, preferably over a VPN or private network.
 

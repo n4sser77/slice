@@ -6,6 +6,7 @@ using System.Text.Json;
 using Agent.Cli.Core;
 using Agent.Cli.Core.Events;
 using Agent.Cli.Core.Results;
+using Agent.Cli.Configuration;
 using Agent.Cli.Presentation;
 using Agent.Cli.Serialization;
 using Agent.Cli.Utils;
@@ -13,9 +14,17 @@ using Slice.Common.Models;
 
 namespace Agent.Cli.Commands;
 
-public class DeployServiceCommand(string targetName, bool publish, string? domain, HttpClient httpClient, CliConfig config) : ICommand
+public class DeployServiceCommand(
+    string targetName,
+    bool publish,
+    string? domain,
+    HttpClient httpClient,
+    CliConfig config,
+    IReadOnlyList<string>? configurationEntries = null,
+    string? configurationFile = null) : ICommand
 {
   private readonly CliConfig _config = config;
+  private readonly IReadOnlyList<string> _configurationEntries = configurationEntries ?? [];
   public static void Register(RootCommand root, HttpClient httpClient, CliConfig? config = null)
   {
     if (config is null)
@@ -25,8 +34,13 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
     var targetArg = new Argument<string>("target") { Description = "The .NET project name or .csproj path to deploy" };
     var publishOpt = new Option<bool>("--publish") { Description = "Expose the app publicly via the reverse proxy" };
     var domainOpt = new Option<string?>("--domain") { Description = "Custom domain. Defaults to <appname>.<base-domain>" };
+    var configurationOpt = new Option<string[]>("--config")
+        { Description = "Application setting as KEY=VALUE. May be repeated" };
+    var configurationFileOpt = new Option<string?>("--config-file")
+        { Description = "Path to a Slice dotenv-style application configuration file" };
 
-    var command = new Command("deploy", "Deploy a .NET service") { targetArg, publishOpt, domainOpt };
+    var command = new Command("deploy", "Deploy a .NET service")
+        { targetArg, publishOpt, domainOpt, configurationOpt, configurationFileOpt };
 
     command.SetAction(async (parseResult, ct) =>
     {
@@ -35,7 +49,9 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
           parseResult.GetValue(publishOpt),
           parseResult.GetValue(domainOpt),
           httpClient,
-          config
+          config,
+          parseResult.GetValue(configurationOpt) ?? [],
+          parseResult.GetValue(configurationFileOpt)
           );
       return await ConsoleRenderer.RenderAsync(cmd.ExecuteStreamingAsync(ct), ct);
     });
@@ -47,11 +63,36 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
   public async IAsyncEnumerable<ExecutionEvent> ExecuteStreamingAsync(
       [EnumeratorCancellation] CancellationToken ct = default)
   {
-    if (domain is not null && !publish)
+    var hasUnpublishedCustomDomain = domain is not null && !publish;
+    if (hasUnpublishedCustomDomain)
     {
       yield return new FinalResult(new ErrorResult(
           "--domain requires --publish. Did you mean: slice deploy <target> --publish --domain <domain>?", 1));
       yield break;
+    }
+
+    ApplicationConfiguration? applicationConfiguration = null;
+    var hasConfigurationInput = configurationFile is not null || _configurationEntries.Count > 0;
+    if (hasConfigurationInput)
+    {
+      yield return new StepStarted("Reading application configuration");
+      var configurationResult = TryReadApplicationConfiguration();
+      if (configurationResult.Error is not null)
+      {
+        yield return new StepFailed("Reading application configuration", configurationResult.Error.Message);
+        yield break;
+      }
+      applicationConfiguration = configurationResult.Configuration;
+      yield return new StepCompleted("Reading application configuration", TimeSpan.Zero);
+
+      yield return new StepStarted("Checking Agent capabilities");
+      var capabilityError = await CheckConfigurationCapabilityAsync(ct);
+      if (capabilityError is not null)
+      {
+        yield return new StepFailed("Checking Agent capabilities", capabilityError.Message);
+        yield break;
+      }
+      yield return new StepCompleted("Checking Agent capabilities", TimeSpan.Zero);
     }
 
     yield return new StepStarted("Finding project files");
@@ -73,7 +114,7 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
     yield return new StepCompleted("Building project", TimeSpan.Zero);
 
     yield return new StepStarted("Creating deployment package");
-    var packageResult = TryCreatePackage(buildResult.publishPath!);
+    var packageResult = TryCreatePackage(buildResult.publishPath!, configurationFile);
     if (packageResult.error is ErrorResult packageError)
     {
       yield return new StepFailed("Creating deployment package", packageError.Message);
@@ -82,7 +123,8 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
     yield return new StepCompleted("Creating deployment package", TimeSpan.Zero);
 
     yield return new StepStarted("Uploading to deployment service");
-    var uploadResult = await TryUploadAsync(packageResult.zipStream!, packageResult.fileName!, ct);
+    var uploadResult = await TryUploadAsync(
+        packageResult.zipStream!, packageResult.fileName!, applicationConfiguration, ct);
     if (uploadResult.error is ErrorResult uploadError)
     {
       yield return new StepFailed("Uploading to deployment service", uploadError.Message);
@@ -174,7 +216,9 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
     }
   }
 
-  internal (MemoryStream? zipStream, string? fileName, ErrorResult? error) TryCreatePackage(string publishPath)
+  internal (MemoryStream? zipStream, string? fileName, ErrorResult? error) TryCreatePackage(
+      string publishPath,
+      string? selectedConfigurationFile = null)
   {
     try
     {
@@ -188,6 +232,10 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
 
         foreach (var file in files)
         {
+          var candidateName = Path.GetFileName(file);
+          if (ShouldExcludeFromPackage(candidateName, selectedConfigurationFile))
+            continue;
+
           var relativePath = Path.GetRelativePath(publishPath, file)
               .Replace(Path.DirectorySeparatorChar, '/');
           var entry = arc.CreateEntry(relativePath);
@@ -208,7 +256,65 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
     }
   }
 
-  private async Task<(DeployResult? result, ErrorResult? error)> TryUploadAsync(MemoryStream zipStream, string fileName, CancellationToken ct)
+  private (ApplicationConfiguration? Configuration, ErrorResult? Error)
+      TryReadApplicationConfiguration()
+  {
+    try
+    {
+      return (SliceConfigurationParser.Parse(configurationFile, _configurationEntries), null);
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException)
+    {
+      return (null, new ErrorResult(ex.Message, 1));
+    }
+  }
+
+  private static bool ShouldExcludeFromPackage(
+      string candidateName,
+      string? selectedConfigurationFile) =>
+      candidateName.Equals(".env.slice", StringComparison.OrdinalIgnoreCase) ||
+      selectedConfigurationFile is not null &&
+      candidateName.Equals(
+          Path.GetFileName(selectedConfigurationFile),
+          StringComparison.OrdinalIgnoreCase);
+
+  private async Task<ErrorResult?> CheckConfigurationCapabilityAsync(CancellationToken ct)
+  {
+    try
+    {
+      using var response = await httpClient.GetAsync("capabilities", ct);
+      if (!response.IsSuccessStatusCode)
+      {
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+          return UnsupportedConfigurationError();
+        return new ErrorResult(
+            $"Agent capability check failed: {response.StatusCode}. Verify the Agent URL and API key.", 1);
+      }
+
+      var body = await response.Content.ReadAsStringAsync(ct);
+      var capabilities = JsonSerializer.Deserialize(body, CliJsonContext.Default.AgentCapabilities);
+      var supportsApplicationConfiguration = capabilities?.Features.Contains(
+          AgentFeatures.ApplicationConfigurationV1,
+          StringComparer.Ordinal) == true;
+      if (!supportsApplicationConfiguration)
+        return UnsupportedConfigurationError();
+
+      return null;
+    }
+    catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+    {
+      return new ErrorResult($"Could not verify Agent configuration support: {ex.Message}", 1);
+    }
+  }
+
+  private static ErrorResult UnsupportedConfigurationError() => new(
+      "This Slice Agent does not support application configuration. Upgrade the Agent before deploying with --config or --config-file.", 1);
+
+  private async Task<(DeployResult? result, ErrorResult? error)> TryUploadAsync(
+      MemoryStream zipStream,
+      string fileName,
+      ApplicationConfiguration? applicationConfiguration,
+      CancellationToken ct)
   {
     try
     {
@@ -218,8 +324,15 @@ public class DeployServiceCommand(string targetName, bool publish, string? domai
       multipart.Add(new StringContent(publish ? "true" : "false"), "publish");
       if (domain is not null)
         multipart.Add(new StringContent(domain), "domain");
+      if (applicationConfiguration is not null)
+      {
+        var json = JsonSerializer.Serialize(
+            applicationConfiguration,
+            CliJsonContext.Default.ApplicationConfiguration);
+        multipart.Add(new StringContent(json), "configuration");
+      }
 
-      var uploadResult = await httpClient.PostAsync("services", multipart, ct);
+      using var uploadResult = await httpClient.PostAsync("services", multipart, ct);
 
       if (!uploadResult.IsSuccessStatusCode)
       {

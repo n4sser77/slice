@@ -25,38 +25,17 @@ The core deployment path works:
 - Removal cleans up the unit, application files, port allocation, and Caddy
   route.
 - Development environments expose OpenAPI and a Scalar API reference.
+- The Agent requires API-key authentication for deployment and management.
+- Deployed applications receive persistent runtime configuration and secrets
+  through a runtime-neutral Slice configuration snapshot.
 
-The core is useful, but onboarding is still manual and deployed applications
-cannot yet receive their own configuration or secrets.
+The core is useful, but onboarding is still manual and Agent traffic still
+needs a trusted network or external TLS termination.
 
 ## P0 — Production-ready deployments
 
 These capabilities block realistic workloads or safe exposure. They take
 priority over new surfaces such as a dashboard or Aspire integration.
-
-### Application environment and secrets — [#35](https://github.com/n4sser77/slice/issues/35)
-
-Deployed applications need connection strings, API credentials, and runtime
-configuration. The intended first workflow is:
-
-```bash
-slice deploy MyApp \
-  --env ConnectionStrings__Main="Host=db;Database=myapp" \
-  --env ExternalApi__Key="..."
-```
-
-Values will be validated by both CLI and Agent, stored in a mode `0600`
-systemd environment file, and referenced by the generated service. Slice-owned
-`ASPNETCORE_*` and `DOTNET_*` values remain reserved.
-
-This is the highest-value product capability because an application without
-database, API, or secret configuration is rarely production-usable.
-
-### Agent authentication — [#25](https://github.com/n4sser77/slice/issues/25)
-
-Every deployment and management endpoint must require authentication. The CLI
-must attach credentials without printing or logging them, and comparisons must
-avoid timing leaks.
 
 ### Secure transport — [#27](https://github.com/n4sser77/slice/issues/27)
 
@@ -185,11 +164,12 @@ Completed hardening includes:
 - ZIP traversal rejection.
 - Port and reverse-proxy cleanup during removal.
 - `NoNewPrivileges` and `PrivateTmp` for deployed services.
+- API-key authentication with fixed-time comparison.
+- Application configuration validation, private atomic storage, and systemd
+  runtime materialization.
 
 Still required before production exposure:
 
-- Application environment/secrets (#35).
-- Agent authentication (#25).
 - TLS for Agent traffic (#27).
 - Generic external errors with structured internal logging (#29).
 - Deployment rate limiting (#30).

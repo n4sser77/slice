@@ -14,8 +14,12 @@ namespace Agent.Serialization;
 [JsonSerializable(typeof(List<SystemdService>))]
 [JsonSerializable(typeof(ServiceStatus))]
 [JsonSerializable(typeof(DeployResult))]
+[JsonSerializable(typeof(ApplicationConfiguration))]
+[JsonSerializable(typeof(AgentCapabilities))]
 [JsonSerializable(typeof(CaddyRoute))]
 [JsonSerializable(typeof(IFormFile))]
-[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSourceGenerationOptions(
+    PropertyNameCaseInsensitive = true,
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 public partial class AppJsonContext : JsonSerializerContext { }
-
